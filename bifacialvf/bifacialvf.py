@@ -596,7 +596,7 @@ def simulate(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180,
         
         return
 
-def skycomposition_method(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180, 
+def skycomposition_method(myTMY3, spectral_file_path, meta, writefiletitle=None, tilt=0, sazm=180, 
              clearance_height=None, hub_height = None, 
              pitch=None, rowType='interior', transFactor=0.01, sensorsy=6, 
              PVfrontSurface='glass', PVbackSurface='glass', albedo=None,  
@@ -659,11 +659,12 @@ def skycomposition_method(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180,
         (data, metadata) = loadVFresults(write_file_baseline)
         composite_data = data
 
-        #C - DNI & Alb to 0
+        #C - DNI & Alb to 0 - Only thing available is DHI from other sources
         myTMY3_DNIALB0 = myTMY3.copy()
         myTMY3_DNIALB0.loc[:, "DNI"] = 0
         myTMY3_DNIALB0.loc[:, "Alb"] = 0
         write_file_DNIALB0 = writefiletitle[:-4] + "_DNIALB0.csv"
+        myTMY3_DNIALB0.to_csv('DNIALB0_weather.csv')
         simulate(myTMY3=myTMY3_DNIALB0, meta=meta, writefiletitle=write_file_DNIALB0, tilt=tilt, sazm=sazm, 
              clearance_height=clearance_height, hub_height = hub_height, 
              pitch=pitch, rowType='interior', transFactor=transFactor, sensorsy=sensorsy, 
@@ -685,10 +686,11 @@ def skycomposition_method(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180,
         #data.rename(dict)
         #composite_data = pd.concat([composite_data, data])
         
-        #D - DHI & Alb to 0
+        #D - DHI & Alb to 0 - only thing available is DNI from other sources
         myTMY3_DHIALB0 = myTMY3.copy()
         myTMY3_DHIALB0.loc[:, "DHI"] = 0
         myTMY3_DHIALB0.loc[:, "Alb"] = 0
+        myTMY3_DHIALB0.to_csv('DHIALB0_weather.csv')
         write_file_DHIALB0 = writefiletitle[:-4] + "_DHIALB0.csv"
         simulate(myTMY3=myTMY3_DHIALB0, meta=meta, writefiletitle=write_file_DHIALB0, tilt=tilt, sazm=sazm, 
              clearance_height=clearance_height, hub_height = hub_height, 
@@ -712,9 +714,10 @@ def skycomposition_method(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180,
         #data.rename(dict)
         #composite_data = pd.concat([composite_data, data])
         
-        #A - DHI to 0
+        #A - DHI to 0 - DNI from ground + other sources, subtract other sources
         myTMY3_DHI0 = myTMY3.copy()
         myTMY3_DHI0.loc[:,'DHI'] = 0
+        myTMY3_DHI0.to_csv('DHI0_weather.csv')
         write_file_DHI0 = writefiletitle[:-4] + "_DHI0.csv"
         dict = {}
         simulate(myTMY3=myTMY3_DHI0, meta=meta, writefiletitle=write_file_DHI0, tilt=tilt, sazm=sazm, 
@@ -737,9 +740,10 @@ def skycomposition_method(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180,
         #data.rename(dict)
         #composite_data = pd.concat([composite_data, data])
         
-        #B - DNI to 0
+        #B - DNI to 0, DHI from ground and other sources, subtract other sources
         myTMY3_DNI0 = myTMY3.copy()
         myTMY3_DNI0.loc[:, "DNI"] = 0
+        myTMY3_DNI0.to_csv('DNI0_weather.csv')
         write_file_DNI0 = writefiletitle[:-4] + "_DNI0.csv"
         simulate(myTMY3=myTMY3_DNI0, meta=meta, writefiletitle=write_file_DNI0, tilt=tilt, sazm=sazm, 
              clearance_height=clearance_height, hub_height = hub_height, 
@@ -759,6 +763,35 @@ def skycomposition_method(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180,
             composite_data["Avg_RowBackGTI_DHIReflected"] = composite_data["Avg_RowBackGTI_DHIReflected"] + (composite_data[new_string])/sensorsy
         #data.rename(dict)
         #composite_data = pd.concat([composite_data, data])
+
+        min_lambda = 280
+        max_lambda = 400
+        lambda_iter = 5
+        lambda_range = np.arange(min_lambda, max_lambda, lambda_iter)
+        #spectral_file_path = ''
+        composite_data['Sum_DNI'] = 0
+        composite_data['Sum_DHI'] = 0
+        composite_data['Sum_DNI_ALB'] = 0
+        composite_data['Sum_DHI_ALB'] = 0
+        for file in os.listdir(spectral_file_path):
+            spec_tmy = pd.read_csv('data/spectral_tmys/' + file, skiprows=1)
+            composite_data['Sum_DNI'] = composite_data['Sum_DNI'] + spec_tmy['DNI']
+            composite_data['Sum_DHI'] = composite_data['Sum_DHI'] + spec_tmy['DHI']
+            composite_data['Sum_DNI_ALB'] = composite_data['Sum_DNI_ALB'] + spec_tmy['DNI'] * spec_tmy['ALB']
+            composite_data['Sum_DHI_ALB'] = composite_data['Sum_DHI_ALB'] + spec_tmy['DHI'] * spec_tmy['ALB']
+            num_from_str = int(file[-8:-4])
+            if num_from_str in lambda_range:
+                composite_data['DNI_' + file[-8:-4]] = spec_tmy['DNI']
+                composite_data['DHI_' + file[-8:-4]] = spec_tmy['DHI']
+                composite_data['ALB_' + file[-8:-4]] = spec_tmy['ALB']
+
+        
+        for x in lambda_range:
+            composite_data['G_rear_DNI_' + str(x)] = composite_data['Avg_RowBackGTI_DNIDirect'] / composite_data['Sum_DNI'] * composite_data['DNI_0' + str(x)]
+            composite_data['G_rear_DHI_' + str(x)] = composite_data['Avg_RowBackGTI_DHIDirect'] / composite_data['Sum_DHI'] * composite_data['DHI_0' + str(x)]
+            composite_data['G_rear_DNI_reflected_' + str(x)] = composite_data['Avg_RowBackGTI_DNIReflected'] / composite_data['Sum_DNI_ALB'] * composite_data['DNI_0' + str(x)] * composite_data['ALB_0' + str(x)]
+            composite_data['G_rear_DHI_reflected_' + str(x)] = composite_data['Avg_RowBackGTI_DHIReflected'] / composite_data['Sum_DHI_ALB'] * composite_data['DHI_0' + str(x)] * composite_data['ALB_0' + str(x)]
+            composite_data['G_rear_' + str(x)] = composite_data['G_rear_DNI_' + str(x)] + composite_data['G_rear_DHI_' + str(x)] + composite_data['G_rear_DNI_reflected_' + str(x)] + composite_data['G_rear_DHI_reflected_' + str(x)]
 
         
         composite_data.to_csv(writefiletitle[:-4] + "_composite.csv")
