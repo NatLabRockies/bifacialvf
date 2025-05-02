@@ -596,7 +596,7 @@ def simulate(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180,
         
         return
 
-def skycomposition_method(myTMY3, spectral_file_path, meta, writefiletitle=None, tilt=0, sazm=180, 
+def skycomposition_method(myTMY3, spectral_file_path, lambda_range, meta, writefiletitle=None, tilt=0, sazm=180, 
              clearance_height=None, hub_height = None, 
              pitch=None, rowType='interior', transFactor=0.01, sensorsy=6, 
              PVfrontSurface='glass', PVbackSurface='glass', albedo=None,  
@@ -658,6 +658,9 @@ def skycomposition_method(myTMY3, spectral_file_path, meta, writefiletitle=None,
         
         (data, metadata) = loadVFresults(write_file_baseline)
         composite_data = data
+        # calculate average front and back global tilted irradiance across the module chord
+        composite_data['GTIFrontavg'] = composite_data[['No_1_RowFrontGTI', 'No_2_RowFrontGTI','No_3_RowFrontGTI','No_4_RowFrontGTI','No_5_RowFrontGTI','No_6_RowFrontGTI']].mean(axis=1)
+        composite_data['GTIBackavg'] =composite_data[['No_1_RowBackGTI', 'No_2_RowBackGTI','No_3_RowBackGTI','No_4_RowBackGTI','No_5_RowBackGTI','No_6_RowBackGTI']].mean(axis=1)
 
         #C - DNI & Alb to 0 - Only thing available is DHI from other sources
         myTMY3_DNIALB0 = myTMY3.copy()
@@ -714,7 +717,7 @@ def skycomposition_method(myTMY3, spectral_file_path, meta, writefiletitle=None,
         #data.rename(dict)
         #composite_data = pd.concat([composite_data, data])
         
-        #A - DHI to 0 - DNI from ground + other sources, subtract other sources
+        #C - DHI to 0 - DNI from ground + other sources, subtract other sources
         myTMY3_DHI0 = myTMY3.copy()
         myTMY3_DHI0.loc[:,'DHI'] = 0
         myTMY3_DHI0.to_csv('DHI0_weather.csv')
@@ -764,38 +767,52 @@ def skycomposition_method(myTMY3, spectral_file_path, meta, writefiletitle=None,
         #data.rename(dict)
         #composite_data = pd.concat([composite_data, data])
 
+        composite_data.index = pd.to_datetime(composite_data['date'])
+        full_year = pd.date_range(start="1/1/"+str(composite_data.index[0].year), periods=8760, freq='1h', tz=composite_data.index[0].tzinfo)
+        composite_data = composite_data.reindex(full_year, fill_value=0)
+        composite_data['date'] = composite_data.index
+
         min_lambda = 280
         max_lambda = 400
         lambda_iter = 5
-        lambda_range = np.arange(min_lambda, max_lambda, lambda_iter)
+        #lambda_range = np.arange(min_lambda, max_lambda, lambda_iter)
+        lambda_range = lambda_range
+
+        weather_df = myTMY3.copy()
         #spectral_file_path = ''
-        composite_data['Sum_DNI'] = 0
-        composite_data['Sum_DHI'] = 0
-        composite_data['Sum_DNI_ALB'] = 0
-        composite_data['Sum_DHI_ALB'] = 0
+        #weather_df.index = composite_data.index
+        weather_df = weather_df.reindex(composite_data.index, fill_value=0)
+        weather_df['Sum_DNI'] = 0
+        weather_df['Sum_DHI'] = 0
+        weather_df['Sum_DNI_ALB'] = 0
+        weather_df['Sum_DHI_ALB'] = 0
+        print(weather_df)
         for file in os.listdir(spectral_file_path):
-            spec_tmy = pd.read_csv('data/spectral_tmys/' + file, skiprows=1)
-            composite_data['Sum_DNI'] = composite_data['Sum_DNI'] + spec_tmy['DNI']
-            composite_data['Sum_DHI'] = composite_data['Sum_DHI'] + spec_tmy['DHI']
-            composite_data['Sum_DNI_ALB'] = composite_data['Sum_DNI_ALB'] + spec_tmy['DNI'] * spec_tmy['ALB']
-            composite_data['Sum_DHI_ALB'] = composite_data['Sum_DHI_ALB'] + spec_tmy['DHI'] * spec_tmy['ALB']
+            #spec_tmy = pd.read_csv(spectral_file_path + "/" + file, skiprows=1)
+            spec_tmy = pd.read_csv(spectral_file_path + "/" + file)
+            spec_tmy.index = weather_df.index
+            weather_df['Sum_DNI'] += spec_tmy['DNI']
+            print(weather_df['Sum_DNI'])
+            weather_df['Sum_DHI'] = weather_df['Sum_DHI'] + spec_tmy['DHI']
+            weather_df['Sum_DNI_ALB'] = weather_df['Sum_DNI_ALB'] + spec_tmy['DNI'] * spec_tmy['ALB']
+            weather_df['Sum_DHI_ALB'] = weather_df['Sum_DHI_ALB'] + spec_tmy['DHI'] * spec_tmy['ALB']
             num_from_str = int(file[-8:-4])
             if num_from_str in lambda_range:
-                composite_data['DNI_' + file[-8:-4]] = spec_tmy['DNI']
-                composite_data['DHI_' + file[-8:-4]] = spec_tmy['DHI']
-                composite_data['ALB_' + file[-8:-4]] = spec_tmy['ALB']
-
+                weather_df['DNI_' + file[-8:-4]] = spec_tmy['DNI']
+                weather_df['DHI_' + file[-8:-4]] = spec_tmy['DHI']
+                weather_df['ALB_' + file[-8:-4]] = spec_tmy['ALB']
+        weather_df.to_csv('weather_df.csv')
         
         for x in lambda_range:
-            composite_data['G_rear_DNI_' + str(x)] = composite_data['Avg_RowBackGTI_DNIDirect'] / composite_data['Sum_DNI'] * composite_data['DNI_0' + str(x)]
-            composite_data['G_rear_DHI_' + str(x)] = composite_data['Avg_RowBackGTI_DHIDirect'] / composite_data['Sum_DHI'] * composite_data['DHI_0' + str(x)]
-            composite_data['G_rear_DNI_reflected_' + str(x)] = composite_data['Avg_RowBackGTI_DNIReflected'] / composite_data['Sum_DNI_ALB'] * composite_data['DNI_0' + str(x)] * composite_data['ALB_0' + str(x)]
-            composite_data['G_rear_DHI_reflected_' + str(x)] = composite_data['Avg_RowBackGTI_DHIReflected'] / composite_data['Sum_DHI_ALB'] * composite_data['DHI_0' + str(x)] * composite_data['ALB_0' + str(x)]
+            composite_data['G_rear_DNI_' + str(x)] = composite_data['Avg_RowBackGTI_DNIDirect'] / weather_df['Sum_DNI'] * weather_df['DNI_0' + str(x)]
+            composite_data['G_rear_DHI_' + str(x)] = composite_data['Avg_RowBackGTI_DHIDirect'] / weather_df['Sum_DHI'] * weather_df['DHI_0' + str(x)]
+            composite_data['G_rear_DNI_reflected_' + str(x)] = composite_data['Avg_RowBackGTI_DNIReflected'] / weather_df['Sum_DNI_ALB'] * weather_df['DNI_0' + str(x)] * weather_df['ALB_0' + str(x)]
+            composite_data['G_rear_DHI_reflected_' + str(x)] = composite_data['Avg_RowBackGTI_DHIReflected'] / weather_df['Sum_DHI_ALB'] * weather_df['DHI_0' + str(x)] * weather_df['ALB_0' + str(x)]
             composite_data['G_rear_' + str(x)] = composite_data['G_rear_DNI_' + str(x)] + composite_data['G_rear_DHI_' + str(x)] + composite_data['G_rear_DNI_reflected_' + str(x)] + composite_data['G_rear_DHI_reflected_' + str(x)]
 
         
         composite_data.to_csv(writefiletitle[:-4] + "_composite.csv")
-
+        composite_data.to_pickle(writefiletitle[:-4] + "_composite.pkl")
         return composite_data
 
         
