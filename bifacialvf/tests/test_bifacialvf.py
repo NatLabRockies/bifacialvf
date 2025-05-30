@@ -5,7 +5,6 @@ to run coverage test, py.test --cov-report term-missing --cov=bifacialvf
 """
 import pytest
 import numpy as np
-import pandas as pd
 import os
 import bifacialvf
 from bifacialvf.tests import (
@@ -22,19 +21,19 @@ MARION_C_File = os.path.join(TESTDIR,'724010TYA_BillMarion_C_Results.csv')
 print(TESTDIR)
 print(DATADIR)
 #os.path.abspath(os.path.join(os.path.dirname( __file__ ), '..', 'templates'))
-def test_readInputTMY():
+def test_readWeatherFile():
     ''' 
     read in 724010TYA.csv and USA_VA_Richmond.Intl.AP.724010_TMY.epw
     6/22 GHI is 909, sunup, sunrise at 7:00 and 18:00 on 12/31
     '''
-    (myTMY3, meta) = bifacialvf.bifacialvf.readInputTMY(os.path.join(DATADIR,"724010TYA.CSV"))
-    assert int(myTMY3.loc['1985-06-22 12:0:0'].GHI) == 909
-    assert np.allclose(myTMY3.loc[pd.to_datetime(['1978-12-31 7:0:0-5:00','1978-12-31 18:0:0-5:00']),'GHI'].values, np.array([0,0]))
-    
-    (myEPW, metaEPW) = bifacialvf.bifacialvf.readInputTMY(os.path.join(DATADIR,"USA_VA_Richmond.Intl.AP.724010_TMY.epw"))
-    assert int(myEPW.loc['1963-06-22 12:0:0'].GHI) == 858
-    assert np.allclose(myTMY3.loc[pd.to_datetime(['1978-12-31 7:0:0-5:00','1978-12-31 18:0:0-5:00']),'GHI'].values, np.array([0,0]))
-    
+    (myTMY3, meta) = bifacialvf.bifacialvf.readWeatherFile(os.path.join(DATADIR,"724010TYA.CSV"), source='TMY3')
+    assert myTMY3.loc['1985-06-22 12:0:0'].ghi.to_numpy() == 909
+    assert np.allclose(myTMY3[myTMY3.index.isin(['1978-12-31 7:0:0-5:00','1978-12-31 18:0:0-5:00'])].ghi.to_numpy(), np.array([0,0]) )
+
+    (myEPW, metaEPW) = bifacialvf.bifacialvf.readWeatherFile(os.path.join(DATADIR,"USA_VA_Richmond.Intl.AP.724010_TMY.epw"))
+    assert myEPW.loc['1963-06-22 12:0:0'].ghi.to_numpy() == 858
+    assert np.allclose(myTMY3[myEPW.index.isin(['1959-12-31 7:0:0-5:00','1959-12-31 18:0:0-5:00'])].ghi.to_numpy(), np.array([0,0]) )
+   
 def test_endtoend():
     '''
     end to end test, first 24 hours of VA Richmond
@@ -71,7 +70,7 @@ def test_endtoend():
     limit_angle = 60
 
     # read input
-    myTMY3, meta = bifacialvf.bifacialvf.readInputTMY(TMYtoread)
+    myTMY3, meta = bifacialvf.bifacialvf.readWeatherFile(TMYtoread, source='TMY3')
     deltastyle = 'TMY3'
     myTMY3_2 = myTMY3.iloc[0:24].copy()
     # Simulate just the first 24 hours of the Richmond data file
@@ -134,7 +133,7 @@ def test_1axis_endtoend():
 
 
     # read input
-    myTMY3, meta = bifacialvf.bifacialvf.readInputTMY(TMYtoread)
+    myTMY3, meta = bifacialvf.bifacialvf.readWeatherFile(TMYtoread)
     #deltastyle = 'TMY3'
     myTMY3_2 = myTMY3.iloc[0:24].copy()
     # Simulate just the first 24 hours of the Richmond data file. SINGLE
