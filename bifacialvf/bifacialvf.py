@@ -596,7 +596,7 @@ def simulate(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180,
         
         return
 
-def skycomposition_method(myTMY3, spectral_file_path, lambda_range, meta, writefiletitle=None, tilt=0, sazm=180, 
+def skycomposition_method(myTMY3, spectral_file_path, lambda_range, integrated_spectrum, meta, writefiletitle=None, tilt=0, sazm=180, 
              clearance_height=None, hub_height = None, 
              pitch=None, rowType='interior', transFactor=0.01, sensorsy=6, 
              PVfrontSurface='glass', PVbackSurface='glass', albedo=None,  
@@ -722,7 +722,7 @@ def skycomposition_method(myTMY3, spectral_file_path, lambda_range, meta, writef
         myTMY3_DHI0.loc[:,'DHI'] = 0
         myTMY3_DHI0.to_csv('DHI0_weather.csv')
         write_file_DHI0 = writefiletitle[:-4] + "_DHI0.csv"
-        dict = {}
+        # dict = {}
         simulate(myTMY3=myTMY3_DHI0, meta=meta, writefiletitle=write_file_DHI0, tilt=tilt, sazm=sazm, 
              clearance_height=clearance_height, hub_height = hub_height, 
              pitch=pitch, rowType='interior', transFactor=transFactor, sensorsy=sensorsy, 
@@ -768,6 +768,13 @@ def skycomposition_method(myTMY3, spectral_file_path, lambda_range, meta, writef
         #composite_data = pd.concat([composite_data, data])
 
         composite_data.index = pd.to_datetime(composite_data['date'])
+
+        spectra_files = next(os.walk(spectral_file_path))[2]
+        spectra_files.sort()
+        temp = pd.read_csv(os.path.join(spectral_file_path, spectra_files[0]))
+        temp.index = pd.to_datetime(temp['Date (MM/DD/YYYY)'] + ' ' + temp['Time (HH:MM)'], format='%m/%d/%Y %H:%M')
+        year = temp.index[0].year
+        composite_data.index = composite_data.index.map(lambda dt: dt.replace(year=year))
         full_year = pd.date_range(start="1/1/"+str(composite_data.index[0].year), periods=8760, freq='1h', tz=composite_data.index[0].tzinfo)
         composite_data = composite_data.reindex(full_year, fill_value=0)
         composite_data['date'] = composite_data.index
@@ -781,38 +788,54 @@ def skycomposition_method(myTMY3, spectral_file_path, lambda_range, meta, writef
         weather_df = myTMY3.copy()
         #spectral_file_path = ''
         #weather_df.index = composite_data.index
+        weather_df.index = weather_df.index.map(lambda dt: dt.replace(year=year))
         weather_df = weather_df.reindex(composite_data.index, fill_value=0)
-        weather_df['Sum_DNI'] = 0
-        weather_df['Sum_DHI'] = 0
-        weather_df['Sum_DNI_ALB'] = 0
-        weather_df['Sum_DHI_ALB'] = 0
-        print(weather_df)
+        integrated_spectrum = integrated_spectrum.reindex(composite_data.index, fill_value=0)
+        Sum_DNI = integrated_spectrum['Sum_DNI']
+        Sum_DHI = integrated_spectrum['Sum_DHI']
+        Sum_DNI_ALB = integrated_spectrum['Sum_DNI_ALB']
+        Sum_DHI_ALB = integrated_spectrum['Sum_DHI_ALB']
+
         for file in os.listdir(spectral_file_path):
             #spec_tmy = pd.read_csv(spectral_file_path + "/" + file, skiprows=1)
             spec_tmy = pd.read_csv(spectral_file_path + "/" + file)
-            spec_tmy.index = weather_df.index
-            weather_df['Sum_DNI'] += spec_tmy['DNI']
-            print(weather_df['Sum_DNI'])
-            weather_df['Sum_DHI'] = weather_df['Sum_DHI'] + spec_tmy['DHI']
-            weather_df['Sum_DNI_ALB'] = weather_df['Sum_DNI_ALB'] + spec_tmy['DNI'] * spec_tmy['ALB']
-            weather_df['Sum_DHI_ALB'] = weather_df['Sum_DHI_ALB'] + spec_tmy['DHI'] * spec_tmy['ALB']
+            spec_tmy.index = pd.to_datetime(spec_tmy['Date (MM/DD/YYYY)'] + ' ' + spec_tmy['Time (HH:MM)'], format='%m/%d/%Y %H:%M')
+            year = composite_data.index[0].year
+            spec_tmy.index = spec_tmy.index.map(lambda dt: dt.replace(year=year))
+            spec_tmy.index = spec_tmy.index.tz_localize(composite_data.index[0].tzinfo)
+        
+            # spec_tmy.index = weather_df.index
+            spec_tmy = spec_tmy.reindex(weather_df.index)
+
+           
             num_from_str = int(file[-8:-4])
             if num_from_str in lambda_range:
                 weather_df['DNI_' + file[-8:-4]] = spec_tmy['DNI']
                 weather_df['DHI_' + file[-8:-4]] = spec_tmy['DHI']
                 weather_df['ALB_' + file[-8:-4]] = spec_tmy['ALB']
         weather_df.to_csv('weather_df.csv')
-        
+        agg_cols = []
+        wavelength_str = 'Spectra: [ '
+        #wavelength_str = 'Irradiance: ['
         for x in lambda_range:
-            composite_data['G_rear_DNI_' + str(x)] = composite_data['Avg_RowBackGTI_DNIDirect'] / weather_df['Sum_DNI'] * weather_df['DNI_0' + str(x)]
-            composite_data['G_rear_DHI_' + str(x)] = composite_data['Avg_RowBackGTI_DHIDirect'] / weather_df['Sum_DHI'] * weather_df['DHI_0' + str(x)]
-            composite_data['G_rear_DNI_reflected_' + str(x)] = composite_data['Avg_RowBackGTI_DNIReflected'] / weather_df['Sum_DNI_ALB'] * weather_df['DNI_0' + str(x)] * weather_df['ALB_0' + str(x)]
-            composite_data['G_rear_DHI_reflected_' + str(x)] = composite_data['Avg_RowBackGTI_DHIReflected'] / weather_df['Sum_DHI_ALB'] * weather_df['DHI_0' + str(x)] * weather_df['ALB_0' + str(x)]
+            agg_cols.append('G_rear_' + str(x))
+            wavelength_str += str(x) + ', '
+            composite_data['G_rear_DNI_' + str(x)] = composite_data['Avg_RowBackGTI_DNIDirect'] / Sum_DNI.mask(Sum_DNI == 0) * weather_df['DNI_0' + str(x)]
+            composite_data['G_rear_DHI_' + str(x)] = composite_data['Avg_RowBackGTI_DHIDirect'] / Sum_DHI.mask(Sum_DHI == 0) * weather_df['DHI_0' + str(x)]
+            composite_data['G_rear_DNI_reflected_' + str(x)] = composite_data['Avg_RowBackGTI_DNIReflected'] / Sum_DNI_ALB.mask(Sum_DNI_ALB == 0) * weather_df['DNI_0' + str(x)] * weather_df['ALB_0' + str(x)]
+            composite_data['G_rear_DHI_reflected_' + str(x)] = composite_data['Avg_RowBackGTI_DHIReflected'] / Sum_DHI_ALB.mask(Sum_DHI_ALB == 0) * weather_df['DHI_0' + str(x)] * weather_df['ALB_0' + str(x)]
             composite_data['G_rear_' + str(x)] = composite_data['G_rear_DNI_' + str(x)] + composite_data['G_rear_DHI_' + str(x)] + composite_data['G_rear_DNI_reflected_' + str(x)] + composite_data['G_rear_DHI_reflected_' + str(x)]
-
-        
-        composite_data.to_csv(writefiletitle[:-4] + "_composite.csv")
-        composite_data.to_pickle(writefiletitle[:-4] + "_composite.pkl")
+        wavelength_str += ']'
+        final_output = weather_df[['relative_humidity', 'DryBulb']].copy()
+        final_output = final_output.rename(columns={'relative_humidity': 'RH', 'DryBulb': 'Temp'})
+        # final_output = final_output.join(composite_data[agg_cols].agg(dict,axis=1)
+        #                         .to_frame(wavelength_str))
+        final_output = final_output.join(composite_data[agg_cols].agg(list,axis=1)
+                                .to_frame(wavelength_str))
+        final_output.to_csv(writefiletitle[:-4] + "_composite.csv")
+        final_output.to_pickle(writefiletitle[:-4] + "_composite.pkl")
+        # composite_data.to_csv(writefiletitle[:-4] + "_composite.csv")
+        # composite_data.to_pickle(writefiletitle[:-4] + "_composite.pkl")
         return composite_data
 
         
