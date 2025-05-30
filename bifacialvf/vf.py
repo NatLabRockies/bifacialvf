@@ -410,115 +410,6 @@ def getBackSurfaceIrradiances(rowType, maxShadow, PVbackSurface, beta, sazm,
     # End of GetBackSurfaceIrradiances
 
 
-def divideAndAlignAlbedos(albedo, n_divisions, isOneAxisTracking,
-                          horizontalLength, rowToRow, surface_rotation):
-    '''
-    #(const std::vector<double>& albedo /*-*/, size_t n_divisions /*-*/,
-    # bool isOneAxisTracking /*-*/,
-    #double horizontalLength /*m*/, double rowToRow /*m*/, double
-    # surface_rotation /*rad*/)
-    # Sil Note: size_t = 100 divisions..
-
-    Subdivide spatial albedos and if 1-axis tracking change reference from the
-    row midline to the front
-    '''
-
-    if (n_divisions % len(albedo)) == 0:
-        print("Functionality only works for even divisions, exiting.")
-        return
-
-    # Upsample vector to n_divisions
-    # Sil Note: THIS IS WRONG.
-    albedo_aligned = []
-    # C++: for (size_t i = 0; i < albedo.size(); i++) {
-    #           for (size_t j = 0; j < n_divisions / albedo.size(); j++) {
-    #               albedo_aligned.push_back(albedo.at(i));
-    for i in range(0, len(albedo)):
-        for j in range(0, n_divisions / len(albedo)):
-            albedo_aligned.append(albedo[i])
-
-    if isOneAxisTracking:
-        # Flip the albedo array if tracking after solar noon (because the 
-        # tilt range = [0, 90] degrees, therefore the tilt convention flips
-        # at solar noon)
-        if surface_rotation > 0: 
-            np.reverse(albedo_aligned.begin(), albedo_aligned.end())
-            #C++: reverse(albedo_aligned.begin(), albedo_aligned.end());
-        
-        # Rotate the albedo vector so the first index is at (or overlapping) the front of the row instead of at center
-        L_division = rowToRow / n_divisions  # length of a single albedo division
-        n = 0.5 * horizontalLength / L_division  # fractional number of albedo 
-                    # segments between front of row and center of row
-        size_t leading_segments = n_divisions - np.ceil(n) # whole albedo 
-                    # segments between center of row and front of row behind
-        rotate(albedo_aligned.begin(), albedo_aligned.begin() + 
-               leading_segments, albedo_aligned.end())  # move the leading 
-                    # segments to the back of the vector
-
-        // 'Shift' the actual ground albedo locations to front of row by weighting-averaging adjacent divisions
-        double frac_div_extending = std::ceil(n) - n;                   // fraction of now first albedo division extending beyond front of row
-        double albedo_front_orig = albedo_aligned.front();
-        for (size_t i = 0; i < n_divisions - 1; i++) {                  // do last segment separately
-            albedo_aligned.at(i) = albedo_aligned.at(i) * (1 - frac_div_extending) + albedo_aligned.at(i + 1) * frac_div_extending;
-        }
-        albedo_aligned.back() = albedo_aligned.back() * (1 - frac_div_extending) + albedo_front_orig * frac_div_extending;
-    }
-
-    return albedo_aligned;
-}
-
-def condenseAndAlignGroundIrrad(ground_irr, size_t, n_divisions, isOneAxisTraking, horizontalLength, rowToRow, surface_rotation)
-#std::vector<double> condenseAndAlignGroundIrrad(const std::vector<double>& ground_irr /*W/m2*/, size_t n_divisions /*-*/, bool isOneAxisTracking /*-*/,
-#                                            double horizontalLength /*m*/, double rowToRow /*m*/, double surface_rotation /*rad*/) {
-    ''' 
-    Condense spatial ground irradiances and if 1-axis tracking change reference from the row front to the midline
-    '''
-    
-    if (len(ground_irr) % n_divisions) == 0:
-        print("Functionality only works for even divisions, exiting.")
-        return
-    
-    ground_aligned = ground_irr
-
-    if (isOneAxisTracking) 
-        #// Rotate the ground irradiance vector so the first index is at (or overlapping) the center of the row instead of at the midline
-        double L_division = rowToRow / ground_aligned.size();          # // length of a single ground division
-        double n = 0.5 * horizontalLength / L_division;                # // fractional number of ground segments between front of row and center of row
-        size_t leading_segments = std::floor(n);                       # // whole ground segments between front of row and center of row
-        rotate(ground_aligned.begin(), ground_aligned.begin() + leading_segments, ground_aligned.end())#   // move the leading segments to the back of the vector
-
-        // 'Shift' the actual ground irradiance locations to center of row by weighting-averaging adjacent divisions
-        double frac_div_extending = n - std::floor(n);                  // fraction of now first ground division extending beyond center of row
-        double ground_front_orig = ground_aligned.front();
-        for (size_t i = 0; i < ground_aligned.size() - 1; i++) {        // do last segment separately
-            ground_aligned.at(i) = ground_aligned.at(i) * (1 - frac_div_extending) + ground_aligned.at(i + 1) * frac_div_extending;
-        }
-        ground_aligned.back() = ground_aligned.back() * (1 - frac_div_extending) + ground_front_orig * frac_div_extending;
-
-        // Flip the ground irradiance if tracking after solar noon (because the tilt range = [0, 90] degrees, therefore the tilt convention flips at solar noon)
-        if (surface_rotation > 0.) {
-            std::reverse(ground_aligned.begin(), ground_aligned.end());
-        }
-    }
-
-    // Downsample vector to n_divisions
-    std::vector<double> ground_condensed;
-    size_t num_to_avg = ground_aligned.size() / n_divisions;
-    size_t i = 0;
-    double sum = 0.;
-    while (i < ground_aligned.size()) {
-        sum += ground_aligned.at(i);
-        if ((i + 1) % num_to_avg == 0) {
-            ground_condensed.push_back(sum / num_to_avg);     // add average to output
-            sum = 0.;
-        }
-        i++;
-    }
-
-    return ground_condensed
-
-
-                                                
 def getFrontSurfaceIrradiances(rowType, maxShadow, PVfrontSurface, beta, sazm,
                                dni, dhi, C, D, albedo, zen, azm, cellRows,
                                pvFrontSH, frontGroundGHI):      
@@ -1208,7 +1099,7 @@ def getGroundShadeFactors(rowType, beta, C, D, elv, azm, sazm):
     # End of getGroundShadeFactors
 
 
-def getSkyConfigurationFactors(rowType, beta, C, D,  testflag=False):
+def getSkyConfigurationFactors(rowType, beta, C, D):
     """
     This method determines the sky configuration factors for points on the
     ground from the leading edge of one row of PV panels to the leading edge of
@@ -1260,9 +1151,7 @@ def getSkyConfigurationFactors(rowType, beta, C, D,  testflag=False):
 
     rearSkyConfigFactors = []
     frontSkyConfigFactors = []
-    skyall1 = []
-    skyall2 = []
-    skyall3 = []
+    
     # Tilt from horizontal of the PV modules/panels, in radians
     beta = beta * DTOR
     # Vertical height of sloped PV panel (in PV panel slope lengths)                    
@@ -1332,10 +1221,7 @@ def getSkyConfigurationFactors(rowType, beta, C, D,  testflag=False):
 
             # Save as arrays of values, same for both to the rear and front
             rearSkyConfigFactors.append(skyAll)
-            frontSkyConfigFactors.append(skyAll)    
-            skyall1.append(sky1)
-            skyall2.append(sky2)
-            skyall3.append(sky3)
+            frontSkyConfigFactors.append(skyAll)        
         # End of if "interior"
 
     elif (rowType == "first"):
@@ -1588,11 +1474,7 @@ def getSkyConfigurationFactors(rowType, beta, C, D,  testflag=False):
     else:
         print("ERROR: Incorrect row type not passed to function GetSkyConfigurationFactors ");
 
-    if  testflag:
-        return rearSkyConfigFactors, frontSkyConfigFactors, skyall1, skyall2, skyall3;
-    
     return rearSkyConfigFactors, frontSkyConfigFactors;
-
 # End of GetSkyConfigurationFactors
 
 
@@ -1693,7 +1575,7 @@ def trackingBFvaluescalculator(beta, hub_height, r2r):
 
 
 
-def getSkyConfigurationFactors2(rowType, data, pitch, groundresolution=100):
+def getSkyConfigurationFactors2(rowType, beta, C, D, pitch):
     """
     Converting inputs to float or series!
     
@@ -1731,20 +1613,17 @@ def getSkyConfigurationFactors2(rowType, data, pitch, groundresolution=100):
         Sky configuration factors to rear of leading PVmodule edge (decimal
         fraction)
     frontSkyConfigFactors : array of size [100]
-        Sky confi
-        guration factors to rear of leading PVmodule edge (decimal
+        Sky configuration factors to rear of leading PVmodule edge (decimal
         fraction)
     Notes
     -----
     The horizontal distance between rows, `D`, is from the back edge of one row
     to the front edge of the next, and it is not the row-to-row spacing.
     """
-    import pandas as pd
 
     rearSkyConfigFactors = []
     frontSkyConfigFactors = []
-    
-    beta = data['tilt']
+
     # Tilt from horizontal of the PV modules/panels, in radians
     beta = beta * DTOR
     # Vertical height of sloped PV panel (in PV panel slope lengths)                    
@@ -1756,21 +1635,19 @@ def getSkyConfigurationFactors2(rowType, data, pitch, groundresolution=100):
     # Forced fix for case of C = 0
     # FIXME: for some reason the Config Factors go from 1 to 2 and not 0 to 1.
     # TODO: investigate why this is happening in the code. #Sil: Did we fix this?        
-    data.loc[data['C']==0,'C']= 0.0000000001
-    D = data['D']
-    
-    if not data[data['C']<0].empty:    
+    C[C==0] = 0.0000000001
+
+    if not C[C<0].empty:    
         LOGGER.error("ERROR: Clearance height is below ground level."
                      " Function GetSkyConfigurationFactors "
                      " will continue but results might be unreliable")
-        data.loc[data['C']<0,'C']= 0.0000000001
-    C = data['C']
- 
+        C[C<0] = 0.0000000001
+
     # Divide the row-to-row spacing into 100 intervals and calculate
     # configuration factors
-    delta = pitch / (groundresolution + 1.0) # 101.0
-    x=np.linspace(delta, pitch-delta, num=groundresolution, endpoint=True)
-    df_x1 = pd.DataFrame(zip(*[x1 for i in range(groundresolution)]))
+    delta = pitch / 101.0
+    x=np.linspace(delta, pitch-delta, num=100, endpoint=True)
+    df_x1 = pd.DataFrame(zip(*[x1 for i in range(100)]))
 
     if (rowType == "interior"):
     # Initialize horizontal dimension x to provide midpoint of intervals
@@ -1795,12 +1672,14 @@ def getSkyConfigurationFactors2(rowType, data, pitch, groundresolution=100):
         df_clear = pd.DataFrame(zip(*[clear for i in range(100)]))
         df = df_x1.subtract(x)  #x1-x
         df = df+pitch*2.0
-        angA = np.arctan2(df_clear, df)
+        df_yx = df_clear/df
+        angA = df_yx.applymap(math.atan)
 
         #angB = math.atan2(C, (2.0 * pitch - x))
         df_y = pd.DataFrame(zip(*[C for i in range(100)]))
         df = 2.0*pitch - x
-        angB = np.arctan2(df_y, df)
+        df_yx = df_y/df
+        angB = df_yx.applymap(math.atan)
 
         beta1 = angA.where(angA > angB, angB).fillna(angA) # selects the max of each element-wise between both dataframes.
 
@@ -1808,11 +1687,13 @@ def getSkyConfigurationFactors2(rowType, data, pitch, groundresolution=100):
         #angA = math.atan2(h + C, (pitch + x1 - x))
         df = df_x1.subtract(x)  #x1-x
         df = df+pitch
-        angA = np.arctan2(df_clear, df)
+        df_yx = df_clear/df
+        angA = df_yx.applymap(math.atan)
 
         #angB = math.atan2(C, (pitch - x))
         df = pitch - x
-        angB = np.arctan2(df_y, df)
+        df_yx = df_y/df
+        angB = df_yx.applymap(math.atan)
 
         # beta2 = min(angA, angB)
         beta2 = angA.where(angA < angB, angB).fillna(angA) # selects the max of each element-wise between both dataframes.
@@ -1822,44 +1703,34 @@ def getSkyConfigurationFactors2(rowType, data, pitch, groundresolution=100):
 
         # check 0 rows away
         #beta4 = math.atan2(h + C, (x1 - x))
-        df_x1_mx = df_x1.subtract(x)  #x1-x
-        beta4 = np.arctan2(df_clear, df_x1_mx)
+        df_yx = df_clear / df_x1.subtract(x)  #x1-x
+        beta4 = df_yx.applymap(math.atan)
 
         #beta5 = math.atan2(C, (-x))
-        beta5 = np.arctan2(df_y, -x)
+        df_yx = df_y / -x
+        beta5 = df_yx.applymap(math.atan) 
 
         #beta6 = math.atan2(h + C, (-D - x))
-        df_D = pd.DataFrame(zip(*[D for i in range(groundresolution)]))
+        df_D = pd.DataFrame(zip(*[D for i in range(100)]))
         df_D = -df_D-x
-        beta6 = np.arctan2(df_clear, df_D)
+        df_yx = df_clear / df_D
+        beta6 = df_yx.applymap(math.atan)
 
-        #   sky1 = 0.5 * (math.cos(beta1) - math.cos(beta2))
-        mask = (beta2-beta1) >= 0
-        sky1 = 0.5*(np.cos(beta1[mask]) - np.cos(beta2[mask]))
-
-        #if (beta4 > beta3):
-        #    sky2 = 0.5 * (math.cos(beta3) - math.cos(beta4))
-        mask = (beta4-beta3) >= 0
-        sky2 = 0.5*(np.cos(beta3[mask]) - np.cos(beta4[mask]))
-
-        #if (beta6 > beta5):
-        #    sky3 = 0.5 * (math.cos(beta5) - math.cos(beta6))
-        mask = (beta6-beta5) >= 0
-        sky3 = 0.5*(np.cos(beta5[mask]) - np.cos(beta6[mask]))
-
-        sky1.fillna(0, inplace=True)
-        sky2.fillna(0, inplace=True)
-        sky3.fillna(0, inplace=True)
-
+        #SIL CONTINUE FROM HERE
+        sky1 =0; sky2 =0; sky3 =0
+        if (beta2 > beta1):
+            sky1 = 0.5 * (math.cos(beta1) - math.cos(beta2))
+        if (beta4 > beta3):
+            sky2 = 0.5 * (math.cos(beta3) - math.cos(beta4))
+        if (beta6 > beta5):
+            sky3 = 0.5 * (math.cos(beta5) - math.cos(beta6))
         skyAll = sky1 + sky2 + sky3
 
         # Save as arrays of values, same for both to the rear and front
         rearSkyConfigFactors.append(skyAll)
-        frontSkyConfigFactors.append(skyAll)      
-
+        frontSkyConfigFactors.append(skyAll)        
     # End of if "interior"
-    
-    #SIL CONTINUE FROM HERE
+
     elif (rowType == "first"):
 
         # RearSkyConfigFactors don't have a row in front, calculation of sky3
@@ -2110,367 +1981,5 @@ def getSkyConfigurationFactors2(rowType, data, pitch, groundresolution=100):
     else:
         print("ERROR: Incorrect row type not passed to function GetSkyConfigurationFactors ");
 
-    return rearSkyConfigFactors, frontSkyConfigFactors, sky1, sky2, sky3;
+    return rearSkyConfigFactors, frontSkyConfigFactors;
 
-def getGroundShadeFactors2(rowType, data):
-    """
-    This method determines if the ground is shaded from direct beam radiation
-    for points on the ground from the leading edge of one row of PV panels to
-    the leading edge of the next row of PV panels behind it. This row-to-row
-    dimension is divided into 100 ground segments and a ground shade factor is
-    returned for each ground segment, with values of 1 for shaded segments and
-    values of 0 for non shaded segments. The fractional amounts of shading of
-    the front and back surfaces of the PV panel are also returned. 8/20/2015
-
-    4/18/2016 - Modified to account for different row types. Because the ground
-    factors may now be different depending on row, they are calculated for the
-    row-to-row dimension to the rear of the leading module edge and to the
-    front of the leading edge. Also returned is the maximum shadow length
-    projected to the front or rear from the front of the module row
-
-    Parameters
-    ----------
-    rowType : str
-        "first", "interior", "last", or "single" 
-    beta
-        Tilt from horizontal of the PV modules/panels (deg)
-    C
-        Ground clearance of PV panel (in PV panel slope lengths)            
-    D
-        Horizontal distance between rows of PV panels (in PV panel slope
-        lengths) 
-    elv
-        Sun elevation (in radians)
-    azm
-        Sun azimuth (in radians)
-    sazm
-        Surface azimuth of PV panels (deg)
-
-    Returns
-    -------
-    pvFrontSH : numeric
-        Decimal fraction of the front surface of the PV panel that is shaded,
-        0.0 to 1.0
-    pvBackSH : numeric
-        Decimal fraction of the back surface of the PV panel that is shaded,
-        0.0 to 1.0
-    rearGroundSH : array of size [100]
-        Ground shade factors for ground segments to the rear, 0 = not shaded,
-        1 = shaded
-    frontGroundSH : array of size [100]
-        Ground shade factors for ground segments to the front, 0 = not shaded,
-        1 = shaded
-    maxShadow : numeric
-        Maximum shadow length projected to the front(-) or rear (+) from the
-        front of the module row (in PV panel slope lengths), only used later
-        for rowTypes other than "interior"
-    """
-    rearGroundSH = []
-    frontGroundSH = []
-    
-    beta = data['beta'] * DTOR  # Tilt from horizontal of the PV modules/panels, in radians
-    sazm = data['sazm'] * DTOR  # Surface azimuth of PV module/pamels, in radians
-    azm = data['azm']
-    beta = data['beta']
-    D = data['D']
-    elv = data['elv']
-    C = data['C']
-    
-    h = math.sin(beta);          # Vertical height of sloped PV panel (in PV panel slope lengths)                    
-    x1 = math.cos(beta);         # Horizontal distance from front of panel to rear of panel (in PV panel slope lengths)
-    rtr = D + x1;                # Row-to-row distance (in PV panel slope lengths)
-
-    # Divide the row-to-row spacing into 100 intervals for calculating ground shade factors
-    delta = rtr / 100.0;
-    x = -delta / 2.0;    # Initialize horizontal dimension x to provide midpoof intervals
-
-    Lh = (h / np.tan(elv)) * np.cos(sazm - azm); # Horizontal length of shadow perpindicular to row from top of module to bottom of module
-    Lhc = ((h + C) / np.tan(elv)) * np.cos(sazm - azm); # Horizontal length of shadow perpindicular to row from top of module to ground level
-    Lc = (C / np.tan(elv)) * np.cos(sazm - azm); # Horizontal length of shadow perpindicular to row from bottom of module to ground level
-
-    ss1 = 0.0; se1 = 0.0; ss2 = 0.0; se2 = 0.0;  # Initialize shading start (s) and end (e) to zeros for two potential shading segments
-    pvFrontSH = 0.0;
-    pvBackSH = 0.0;
-
-    if (rowType == "interior"):
-    
-        if (Lh > D): # Front side of PV module partially shaded, back completely shaded, ground completely shaded
-        
-            pvFrontSH = (Lh - D) / (Lh + x1);
-            pvBackSH = 1.0;
-            ss1 = 0.0;      # Ground shaded from 0.0 to rtr
-            se1 = rtr;
-        
-        elif (Lh < -(rtr + x1)):  # Back side of PV module partially shaded, front completely shaded, ground completely shaded
-        
-            pvFrontSH = 1.0;
-            pvBackSH = (Lh + rtr + x1) / (Lh + x1);
-            ss1 = 0.0;      # Ground shaded from 0.0 to rtr
-            se1 = rtr;
-        
-        else:        # Ground is partially shaded (I assume)            
-        
-            if (Lhc >= 0.0):     # Shadow to rear of row, module front unshaded, back shaded
-            
-                pvFrontSH = 0.0;
-                pvBackSH = 1.0;
-                Ss = Lc;         # Shadow starts at Lc
-                Se = Lhc + x1;   # Shadow ends here
-                while (Ss > rtr):
-                
-                    Ss -= rtr;          # Put shadow in correct rtr space if needed
-                    Se -= rtr;
-                
-                ss1 = Ss;
-                se1 = Se;
-                if (se1 > rtr):          # then need to use two shade areas
-                
-                    se1 = rtr;
-                    ss2 = 0.0;
-                    se2 = Se - rtr;
-                    if (se2 > ss1):
-                        # This would mean ground completely shaded, does this occur?
-                        ss1 = 0.0;      # Ground shaded from 0.0 to rtr
-                        se1 = rtr;
-                    
-                
-            
-            else:                # Shadow to front of row, either front or back might be shaded, depending on tilt and other factors
-            
-                Ss = 0.0;         # Shadow starts at Lc, initialize
-                Se = 0.0;         # Shadow ends here, initialize
-                if (Lc < Lhc + x1):
-                
-                    pvFrontSH = 0.0;
-                    pvBackSH = 1.0;
-                    Ss = Lc;         # Shadow starts at Lc
-                    Se = Lhc + x1;   # Shadow ends here
-                
-                else:
-                
-                    pvFrontSH = 1.0;
-                    pvBackSH = 0.0;
-                    Ss = Lhc + x1;  # Shadow starts at Lhc + x1
-                    Se = Lc;        # Shadow ends here
-                
-                while (Ss < 0.0):
-                
-                    Ss += rtr;          # Put shadow in correct rtr space if needed
-                    Se += rtr;
-                
-                ss1 = Ss;
-                se1 = Se;
-                if (se1 > rtr):         # then need to use two shade areas
-                
-                    se1 = rtr;
-                    ss2 = 0.0;
-                    se2 = Se - rtr;
-                    if (se2 > ss1):
-                        # This would mean ground completely shaded, does this occur?
-                        ss1 = 0.0;      # Ground shaded from 0.0 to rtr
-                        se1 = rtr;
-                    
-                
-            
-            # End of if (Lh > D) else branching
-
-        delta = rtr / 100.0;
-        x = -delta / 2.0;    # Initialize horizontal dimension x to provide midpoof intervals            
-        #for (i = 0; i <= 99; i++)
-        for i in range(0,100):
-            
-            x += delta;
-            #if ((x >= ss1 && x < se1) || (x >= ss2 && x < se2)):
-            if ((x >= ss1 and x < se1) or (x >= ss2 and x < se2)):
-            
-                rearGroundSH.append(1);        # x within a shaded interval, set groundSH to 1 to indicate shaded
-                frontGroundSH.append(1);       # same for both front and rear
-            
-            else:
-            
-                rearGroundSH.append(0);        # x not within a shaded interval, set groundSH to 0 to indicated not shaded, i.e. sunny
-                frontGroundSH.append(0);       # same for both front and rear
-            
-            #Console.WriteLine("x = 0,6:0.0000 groundSH = 1", x, groundSH[i]);
-        
-        # End of if row type == "interior"
-
-    elif (rowType == "first"):
-    
-        if (Lh > 0.0):   # Sun is on front side of PV module
-        
-            pvFrontSH = 0.0;
-            pvBackSH = 1.0;
-            ss1 = Lc;           # Ground shaded from shadow of lower edge
-            se1 = x1 + Lhc;     # to shadow of upper edge                                        
-            # End of if sun on front side of PV module
-
-        elif (Lh < -(rtr + x1)):  # Back side of PV module partially shaded from row to rear, front completely shaded, ground completely shaded
-        
-            pvFrontSH = 1.0;
-            pvBackSH = (Lh + rtr + x1) / (Lh + x1);
-            ss1 = -rtr;      # Ground shaded from -rtr to rtr
-            se1 = rtr;
-
-            # End of if back side of PV module partially shaded, front completely shaded, ground completely shaded
-
-        else:   # Shadow to frontside of row, either front or back might be shaded, depending on tilt and other factors     
-        
-            if (Lc < Lhc + x1):
-            
-                pvFrontSH = 0.0;
-                pvBackSH = 1.0;
-                ss1 = Lc;         # Shadow starts at Lc
-                se1 = Lhc + x1;   # Shadow ends here
-            
-            else:
-            
-                pvFrontSH = 1.0;
-                pvBackSH = 0.0;
-                ss1 = Lhc + x1;  # Shadow starts at Lhc + x1
-                se1 = Lc;        # Shadow ends here
-            
-
-            # End of shadow to front of row 
-
-        delta = rtr / 100.0;
-        x = -delta / 2.0;    # Initialize horizontal dimension x to provide midpoof intervals            
-        for i in range(0,100):
-        
-            x += delta;
-            if (x >= ss1 and x < se1):
-                rearGroundSH.append(1)         # x within a shaded interval, set groundSH to 1 to indicate shaded
-            else:
-                rearGroundSH.append(0)         # x not within a shaded interval, set groundSH to 0 to indicated not shaded, i.e. sunny
-        
-
-        x = -rtr - delta / 2.0;    # Initialize horizontal dimension x to provide midpoof intervals for front interval           
-        for i in range(0,100):
-        
-            x += delta;
-            if (x >= ss1 and x < se1):
-                frontGroundSH.append(1)        # x within a shaded interval, set groundSH to 1 to indicate shaded
-            else:
-                frontGroundSH.append(0)        # x not within a shaded interval, set groundSH to 0 to indicated not shaded, i.e. sunny
-        
-        # End of if row type == "first"
-
-    elif (rowType == "last"):
-    
-        if (Lh > D): # Front side of PV module partially shaded, back completely shaded, ground completely shaded
-        
-            pvFrontSH = (Lh - D) / (Lh + x1);
-            pvBackSH = 1.0;
-            ss1 = -rtr;      # Ground shaded from -rtr to rtr
-            se1 = rtr;
-        
-        else:   # Shadow to frontside of row, either front or back might be shaded, depending on tilt and other factors     
-        
-            if (Lc < Lhc + x1):
-            
-                pvFrontSH = 0.0;
-                pvBackSH = 1.0;
-                ss1 = Lc;         # Shadow starts at Lc
-                se1 = Lhc + x1;   # Shadow ends here
-            
-            else:
-            
-                pvFrontSH = 1.0;
-                pvBackSH = 0.0;
-                ss1 = Lhc + x1;  # Shadow starts at Lhc + x1
-                se1 = Lc;        # Shadow ends here
-            
-
-            # End of shadow to front of row 
-
-        delta = rtr / 100.0;
-        x = -delta / 2.0;    # Initialize horizontal dimension x to provide midpoof intervals            
-        for i in range(0,100):
-        
-            x += delta;
-            if (x >= ss1 and x < se1):
-                rearGroundSH.append(1);        # x within a shaded interval, set groundSH to 1 to indicate shaded
-            else:
-                rearGroundSH.append(0);        # x not within a shaded interval, set groundSH to 0 to indicated not shaded, i.e. sunny
-        
-
-        x = -rtr - delta / 2.0;    # Initialize horizontal dimension x to provide midpoof intervals for front interval           
-        for i in range(0,100):
-        
-            x += delta;
-            if (x >= ss1 and x < se1):
-                frontGroundSH.append(1);        # x within a shaded interval, set groundSH to 1 to indicate shaded
-            else:
-                frontGroundSH.append(0);        # x not within a shaded interval, set groundSH to 0 to indicated not shaded, i.e. sunny
-        
-
-        # End of if row type == "last"
-
-    elif (rowType == "single"):
-    
-        if (Lh > 0.0):   # Shadow to the rear
-        
-            pvFrontSH = 0.0;
-            pvBackSH = 1.0;
-            ss1 = Lc;           # Ground shaded from shadow of lower edge
-            se1 = x1 + Lhc;     # to shadow of upper edge                                        
-            # End of if sun on front side of PV module
-
-        else:   # Shadow to frontside of row, either front or back might be shaded, depending on tilt and other factors     
-        
-            if (Lc < Lhc + x1):
-            
-                pvFrontSH = 0.0;
-                pvBackSH = 1.0;
-                ss1 = Lc;         # Shadow starts at Lc
-                se1 = Lhc + x1;   # Shadow ends here
-            
-            else:
-            
-                pvFrontSH = 1.0;
-                pvBackSH = 0.0;
-                ss1 = Lhc + x1;  # Shadow starts at Lhc + x1
-                se1 = Lc;        # Shadow ends here
-            
-
-            # End of shadow to front of row 
-
-        delta = rtr / 100.0;
-        x = -delta / 2.0;    # Initialize horizontal dimension x to provide midpoof intervals            
-        for i in range(0,100):
-        
-            x += delta;
-            if (x >= ss1 and x < se1):
-                rearGroundSH.append(1);        # x within a shaded interval, set groundSH to 1 to indicate shaded
-            else:
-                rearGroundSH.append(0);        # x not within a shaded interval, set groundSH to 0 to indicated not shaded, i.e. sunny
-        
-
-        x = -rtr - delta / 2.0;    # Initialize horizontal dimension x to provide midpoof intervals for front interval           
-        for i in range(0,100):
-        
-            x += delta;
-            if (x >= ss1 and x < se1):
-                frontGroundSH.append(1);        # x within a shaded interval, set groundSH to 1 to indicate shaded
-            else:
-                frontGroundSH.append(0);        # x not within a shaded interval, set groundSH to 0 to indicated not shaded, i.e. sunny
-        
-
-        # End of if row type == "single"
-    else:
-        print ("ERROR: Incorrect row type not passed to function GetGroundShadedFactors ");
-
-    if (abs(ss1) > abs(se1)):      # Maximum shadow length projected from the front of the PV module row
-        maxShadow = ss1;
-    else:
-        maxShadow = se1;
-
-    #Console.WriteLine("elv = 0,6:0.00  azm = 1,6:0.00  sazm = 2,6:0.00", elv * 180.0 / math.pi, azm * 180.0 / math.pi, sazm * 180.0 / math.pi);
-    #Console.WriteLine("ss1 = 0,6:0.0000 se1 = 1,6:0.0000 ss2 = 2,6:0.0000 se2 = 3,6:0.0000     rtr = 4,6:0.000", ss1, se1, ss2, se2, rtr);
-    #Console.WriteLine("pvFrontSH = 0,6:0.00 pvBackSH = 1,6:0.00", pvFrontSH, pvBackSH);
-
-    # End of GetGroundShadedFactors
-    
-    #print "rearGroundSH", rearGroundSH[0]
-    return pvFrontSH, pvBackSH, maxShadow, rearGroundSH, frontGroundSH;
-    # End of getGroundShadeFactors
