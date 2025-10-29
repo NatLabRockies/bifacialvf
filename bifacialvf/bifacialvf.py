@@ -802,7 +802,7 @@ def skycomposition_method(myTMY3, spectral_file_path, lambda_range, integrated_s
         print("Before reindexing, composite_data : ", composite_data)
         composite_data.index = composite_data.index.map(lambda dt: dt.replace(year=year))
         print(composite_data)
-        full_year = pd.date_range(start="1/1/"+str(composite_data.index[0].year), periods=8760, freq='1h', tz=composite_data.index[0].tzinfo)
+        full_year = pd.date_range(start="1/1/"+str(composite_data.index[0].year)+" 00:"+str(composite_data.index[0].minute), periods=8760, freq = '1h', tz=composite_data.index[0].tzinfo)
         composite_data = composite_data.reindex(full_year, fill_value=0)
         composite_data['date'] = composite_data.index
 
@@ -810,33 +810,36 @@ def skycomposition_method(myTMY3, spectral_file_path, lambda_range, integrated_s
         lambda_range = lambda_range
 
         weather_df = myTMY3.copy()
+        if 'Alb' not in weather_df.columns:
+            weather_df['Alb'] = 0.2
         #spectral_file_path = ''
         #weather_df.index = composite_data.index
         weather_df.index = weather_df.index.map(lambda dt: dt.replace(year=year))
         weather_df = weather_df.reindex(composite_data.index, fill_value=0)
+        print(weather_df.index)
         integrated_spectrum = integrated_spectrum.reindex(composite_data.index, fill_value=0)
         Sum_DNI = integrated_spectrum['Sum_DNI']
         Sum_DHI = integrated_spectrum['Sum_DHI']
         Sum_DNI_ALB = integrated_spectrum['Sum_DNI_ALB']
         Sum_DHI_ALB = integrated_spectrum['Sum_DHI_ALB']
 
-        # Determine Seasonal ground cover, if necessary
-        north = [1,2,3,4,10,11,12]
-        south = [5,6,7,8,9,10]
-        if meta["latitude"] < 0: winter = north
-        if meta["latitude"] > 0: winter = south
-#TODO implement snow logic
-        # if ground_material == 'Seasonal':
-        #     MONTH = metdata.datetime[idx].month
-        #     if MONTH in winter :
-        #         if alb >= 0.6:
-        #             ground_material = 'Snow'
-        #         else:
-        #             ground_material = 'DryGrass'
-        #     else:
-        #         ground_material = 'Grass'
+#         # Determine Seasonal ground cover, if necessary
+#         north = [1,2,3,4,10,11,12]
+#         south = [5,6,7,8,9,10]
+#         if meta["latitude"] < 0: winter = north
+#         if meta["latitude"] > 0: winter = south
+# #TODO implement snow logic
+#         if ground_material == 'Seasonal':
+#             MONTH = metdata.datetime[idx].month
+#             if MONTH in winter :
+#                 if alb >= 0.6:
+#                     ground_material = 'Snow'
+#                 else:
+#                     ground_material = 'DryGrass'
+#             else:
+#                 ground_material = 'Grass'
         
-
+        # isSnow = False
         print('Spectral file path: ', spectral_file_path)
         for file in os.listdir(spectral_file_path):
             #spec_tmy = pd.read_csv(spectral_file_path + "/" + file, skiprows=1)
@@ -845,34 +848,82 @@ def skycomposition_method(myTMY3, spectral_file_path, lambda_range, integrated_s
             year = composite_data.index[0].year
             spec_tmy.index = spec_tmy.index.map(lambda dt: dt.replace(year=year))
             spec_tmy.index = spec_tmy.index.tz_localize(composite_data.index[0].tzinfo)
-        
+            print(spec_tmy)
+            print(spec_tmy.index.duplicated().any())
+            print(spec_tmy.loc[:, spec_tmy.columns.duplicated()])
             # spec_tmy.index = weather_df.index
             spec_tmy = spec_tmy.reindex(weather_df.index)
 
-           
+           # Get the day of the year for each entry
+            # day_of_year_values = didx.dayofyear
+            weather_df['Alb_type'] = ''
+            if custom_albedo_dict is not None:
+                for key, value in custom_albedo_dict.items():
+                    print(key)
+                    print(custom_albedo_dict[key])
+                    if ('DayOfYear' in custom_albedo_dict[key] and 'isSnow' not in custom_albedo_dict[key]):
+                        start_date = int(custom_albedo_dict[key]['DayOfYear'])
+                        weather_df.loc[weather_df.index.dayofyear >= start_date, 'Alb_type'] = key
+                    elif('DayOfYear' not in custom_albedo_dict[key] and 'isSnow' in custom_albedo_dict[key]):
+                        isSnow = custom_albedo_dict[key]['isSnow']
+                        if isSnow:
+                            weather_df.loc[weather_df['Alb'] > 0.6, 'Alb_type'] = key
+                    elif('DayOfYear' in custom_albedo_dict[key] and 'isSnow' in custom_albedo_dict[key]):
+                        start_date = int(custom_albedo_dict[key]['DayOfYear'])
+                        isSnow = custom_albedo_dict[key]['isSnow']
+                        if isSnow:
+                            weather_df.loc[weather_df.index.dayofyear >= start_date & weather_df['Alb'] > 0.6, 'Alb_type'] = key
+                    else:
+                        start_date = 1
+                        weather_df.loc[weather_df.index.dayofyear >= start_date, 'Alb_type'] = key
+                    # isSnow = False
+                    # if ('isSnow' in custom_albedo_dict[key]):
+                    #     isSnow = custom_albedo_dict[key]['isSnow']
+                    # if isSnow:
+                    #     weather_df.loc[weather_df['Alb'] > 0.6, 'Alb_type'] = key
+            
+            unique_keys = weather_df['Alb_type'].unique()   
             num_from_str = int(file[-8:-4])
             if num_from_str in lambda_range:
                 weather_df['DNI_' + file[-8:-4]] = spec_tmy['DNI']
                 weather_df['DHI_' + file[-8:-4]] = spec_tmy['DHI']
-                if custom_albedo_dict['Summer'] is None: 
-                    weather_df.loc[~weather_df.index.month.isin(winter), 'ALB_' + file[-8:-4]] = spec_tmy['ALB']
+                if custom_albedo_dict is None:
+                    weather_df['ALB_' + file[-8:-4]] = spec_tmy['ALB']
                 else:
-                    dict_alb_summer = custom_albedo_dict['Summer']['albedo'].split(',')
-                    dict_alb_summer = np.array([float(i)/100.0 for i in dict_alb_summer])
-                    dict_wave_summer = custom_albedo_dict['Summer']['wavelength'].split(',')
-                    dict_wave_summer = np.array([float(i) for i in dict_wave_summer])
-                    print(dict_alb_summer)
-                    weather_df.loc[~weather_df.index.month.isin(winter), 'ALB_' + file[-8:-4]] = np.interp(num_from_str, dict_wave_summer, dict_alb_summer)
+                    for key in unique_keys:
+                        if key == '':
+                            weather_df.loc[weather_df['Alb_type'] == key, 'ALB_' + file[-8:-4]] = spec_tmy['ALB']
+                        elif custom_albedo_dict[key] is not None:
+                            weather_df['ALB_' + file[-8:-4]] = spec_tmy['ALB'] #Initialize albedo
+                            dict_alb = custom_albedo_dict[key]['albedo'].split(',')
+                            dict_alb = np.array([float(i)/100.0 for i in dict_alb])
+                            dict_wave = custom_albedo_dict[key]['wavelength'].split(',')
+                            dict_wave = np.array([float(i) for i in dict_wave])
+                            weather_df.loc[weather_df['Alb_type'] == key, 'ALB_' + file[-8:-4]] = np.interp(num_from_str, dict_wave, dict_alb)
+                        else:
+                            print("Custom albedo for ", key, " not provided, setting to 0")
 
-                if custom_albedo_dict['Winter'] is None:
-                    weather_df.loc[weather_df.index.month.isin(winter), 'ALB_' + file[-8:-4]] = spec_tmy['ALB']
-                else:
-                    dict_alb_winter = custom_albedo_dict['Winter']['albedo'].split(',')
-                    dict_alb_winter = np.array([float(i)/100.0 for i in dict_alb_winter])
+                   #weather_df['ALB_' + file[-8:-4]] = 0
                     
-                    dict_wave_winter = custom_albedo_dict['Winter']['wavelength'].split(',')
-                    dict_wave_winter = np.array([float(i) for i in dict_wave_winter])
-                    weather_df.loc[weather_df.index.month.isin(winter), 'ALB_' + file[-8:-4]] = np.interp(num_from_str, dict_wave_winter, dict_alb_winter)
+                # if custom_albedo_dict['Summer'] is None: 
+                #     weather_df.loc[~weather_df.index.month.isin(winter), 'ALB_' + file[-8:-4]] = spec_tmy['ALB']
+                # else:
+                #     dict_alb_summer = custom_albedo_dict['Summer']['albedo'].split(',')
+                #     dict_alb_summer = np.array([float(i)/100.0 for i in dict_alb_summer])
+                #     dict_wave_summer = custom_albedo_dict['Summer']['wavelength'].split(',')
+                #     dict_wave_summer = np.array([float(i) for i in dict_wave_summer])
+                #     print(dict_alb_summer)
+                #     weather_df.loc[~weather_df.index.month.isin(winter), 'ALB_' + file[-8:-4]] = np.interp(num_from_str, dict_wave_summer, dict_alb_summer)
+
+                # if custom_albedo_dict['Winter'] is None:
+                #     weather_df.loc[weather_df.index.month.isin(winter), 'ALB_' + file[-8:-4]] = spec_tmy['ALB']
+                # else:
+                #     dict_alb_winter = custom_albedo_dict['Winter']['albedo'].split(',')
+                #     dict_alb_winter = np.array([float(i)/100.0 for i in dict_alb_winter])
+                    
+                #     dict_wave_winter = custom_albedo_dict['Winter']['wavelength'].split(',')
+                #     dict_wave_winter = np.array([float(i) for i in dict_wave_winter])
+                #     weather_df.loc[weather_df.index.month.isin(winter), 'ALB_' + file[-8:-4]] = np.interp(num_from_str, dict_wave_winter, dict_alb_winter)
                     
                     #weather_df['ALB_' + file[-8:-4]] = custom_albedo_df['ALB_' + file[-8:-4]]
                     
@@ -903,10 +954,15 @@ def skycomposition_method(myTMY3, spectral_file_path, lambda_range, integrated_s
                 
                 
                 composite_data['G_' + str(header) + '_DNI_' + str(x)] = composite_data['Avg_Row' + str(fb) + 'GTI_DNIDirect'] / Sum_DNI.mask(Sum_DNI == 0) * weather_df['DNI_0' + str(x)]
+                composite_data['G_' + str(header) + '_DNI_' + str(x)] = composite_data['G_' + str(header) + '_DNI_' + str(x)].fillna(0)
                 composite_data['G_' + str(header) + '_DHI_' + str(x)] = composite_data['Avg_Row' + str(fb) + 'GTI_DHIDirect'] / Sum_DHI.mask(Sum_DHI == 0) * weather_df['DHI_0' + str(x)]
+                composite_data['G_' + str(header) + '_DHI_' + str(x)] = composite_data['G_' + str(header) + '_DHI_' + str(x)] .fillna(0)
                 composite_data['G_' + str(header) + '_DNI_reflected_' + str(x)] = composite_data['Avg_Row' + str(fb) + 'GTI_DNIReflected'] / Sum_DNI_ALB.mask(Sum_DNI_ALB == 0) * weather_df['DNI_0' + str(x)] * weather_df['ALB_0' + str(x)]
+                composite_data['G_' + str(header) + '_DNI_reflected_' + str(x)] = composite_data['G_' + str(header) + '_DNI_reflected_' + str(x)].fillna(0)
                 composite_data['G_' + str(header) + '_DHI_reflected_' + str(x)] = composite_data['Avg_Row' + str(fb) + 'GTI_DHIReflected'] / Sum_DHI_ALB.mask(Sum_DHI_ALB == 0) * weather_df['DHI_0' + str(x)] * weather_df['ALB_0' + str(x)]
+                composite_data['G_' + str(header) + '_DHI_reflected_' + str(x)] = composite_data['G_' + str(header) + '_DHI_reflected_' + str(x)].fillna(0)
                 composite_data['G_' + str(header) + '_' + str(x)] = composite_data['G_' + str(header) + '_DNI_' + str(x)] + composite_data['G_' + str(header) + '_DHI_' + str(x)] + composite_data['G_' + str(header) + '_DNI_reflected_' + str(x)] + composite_data['G_' + str(header) + '_DHI_reflected_' + str(x)]
+        
         wavelength_str_front += ']'
         wavelength_str_rear += ']'
         final_output = weather_df[['DryBulb']].copy()
