@@ -811,7 +811,7 @@ def skycomposition_method(myTMY3, spectral_file_path, lambda_range, integrated_s
 
         weather_df = myTMY3.copy()
         if 'Alb' not in weather_df.columns:
-            weather_df['Alb'] = 0.2
+            weather_df['Alb'] = albedo
         #spectral_file_path = ''
         #weather_df.index = composite_data.index
         weather_df.index = weather_df.index.map(lambda dt: dt.replace(year=year))
