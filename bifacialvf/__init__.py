@@ -1,6 +1,6 @@
 # ensure python3 compatible division and printing
 from __future__ import division, print_function, absolute_import
-from bifacialvf.bifacialvf import simulate, getEPW, readInputTMY  # main program
+from bifacialvf.bifacialvf import simulate, skycomposition_method, getEPW, readInputTMY  # main program
 from bifacialvf.vf import getBackSurfaceIrradiances, getFrontSurfaceIrradiances, getGroundShadeFactors  # main subroutines
 from bifacialvf.vf import getSkyConfigurationFactors, trackingBFvaluescalculator, rowSpacing # helper functions
 from bifacialvf.sun import hrSolarPos, perezComp, solarPos, sunIncident # solar position and value

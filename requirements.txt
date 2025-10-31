@@ -3,7 +3,8 @@ kiwisolver==1.4.4
 matplotlib==3.7.5
 numba==0.58.1
 numpy==1.24.4
-pvlib==0.9.4
+pvlib==0.9.4; python_version <= "3.8"
+pvlib==0.13.1; python_version > "3.8"
 pandas==2.0.3
 pvmismatch==4.1
 py==1.11.0

@@ -35,6 +35,7 @@ from tqdm import tqdm
 from bifacialvf.vf import getBackSurfaceIrradiances, getFrontSurfaceIrradiances, getGroundShadeFactors
 from bifacialvf.vf import getSkyConfigurationFactors, trackingBFvaluescalculator, rowSpacing
 from bifacialvf.sun import  perezComp,  sunIncident, sunrisecorrectedsunposition #, hrSolarPos, solarPos,
+from bifacialvf.loadVFresults import loadVFresults
 
 #from bifacialvf.readepw import readepw
 
@@ -594,12 +595,398 @@ def simulate(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180,
         print( "Finished")
         
         return
+
+def skycomposition_method(myTMY3, spectral_file_path, lambda_range, integrated_spectrum, meta, writefiletitle=None, custom_albedo_dict=None, frontResultsOnly=None, tilt=0, sazm=180, 
+             clearance_height=None, hub_height = None, 
+             pitch=None, rowType='interior', transFactor=0.01, sensorsy=6, 
+             PVfrontSurface='glass', PVbackSurface='glass', albedo=None,  
+             tracking=False, backtrack=True, limit_angle=45,
+             calculatePVMismatch=False, cellsnum= 72, 
+             portraitorlandscape='landscape', bififactor = 1.0,
+             calculateBilInterpol=False, BilInterpolParams=None,
+             deltastyle='TMY3', agriPV=False):
+
+
+        '''
+      
+        Description
+        -----------
+        Main function to run the bifacialvf routines 
+    
+        Parameters
+        ---------- 
+        tmyFile (string): Baseline weather file used to modify input weather data for sky composition method
+            DNI, DHI, it can also have DryBulb, Wspd, zenith, azimuth,
+        meta (dict): A dictionary conatining keys: 'latitude', 'longitude', 'TZ', 'Name'
+        writefiletitle:  name of output file
+        tilt:    tilt angle in degrees.  Not used for tracking
+        sazm:    surface azimuth orientation in degrees east of north. For tracking this is the tracker axis orientation
+        C:       normalized ground clearance.  For trackers, this is the module height at zero tilt
+        pitch:     row-to-row normalized distance.  = 1/GCR
+        transFactor:   PV module transmission fraction.  Default 1% (0.01)
+        sensorsy:      Number of points along the module chord to return irradiance values.  Default 6 (1-up landscape module)
+        limit_angle:     1-axis tracking maximum limits of rotation
+        tracking, backtrack:  boolean to enable 1-axis tracking and pvlib backtracking algorithm, respectively
+        albedo:     If a value is passed, that value will be used for all the simulations.
+                    If None is passed (or albedo argument is not passed), program will search the 
+                    TMY file for the "Albe (unitless)" column and use those values
+
+        New Parameters: 
+        # Dictionary input example:
+        # calculateBilInterpol = {'interpolA':0.005, 'IVArray':None, 'beta_voc_all':None, 'm_all':None, 'bee_all':None}
+
+        
+        Returns
+        -------
+        none
+        '''    
+
+        if writefiletitle == None:
+            writefiletitle = "data/Output/baseline.csv"
+
+        front_back_list = ['Back']
+        if frontResultsOnly is None:
+            front_back_list = ['Front', 'Back']
+        elif frontResultsOnly is True:
+            front_back_list = ['Front']
+
+        #Baseline
+        write_file_baseline = writefiletitle[:-4] + "_baseline.csv"
+        simulate(myTMY3=myTMY3, meta=meta, writefiletitle=write_file_baseline, tilt=tilt, sazm=sazm, 
+             clearance_height=clearance_height, hub_height = hub_height, 
+             pitch=pitch, rowType='interior', transFactor=transFactor, sensorsy=sensorsy, 
+             PVfrontSurface='glass', PVbackSurface='glass', albedo=albedo,  
+             tracking=tracking, backtrack=backtrack, limit_angle=limit_angle,
+             calculatePVMismatch=calculatePVMismatch, cellsnum= cellsnum, 
+             portraitorlandscape=portraitorlandscape, bififactor = bififactor,
+             calculateBilInterpol=calculateBilInterpol, BilInterpolParams=BilInterpolParams,
+             deltastyle=deltastyle, agriPV=agriPV)
+        
+        (data, metadata) = loadVFresults(write_file_baseline)
+        composite_data = data
+        # calculate average front and back global tilted irradiance across the module chord
+        composite_data['GTIFrontavg'] = composite_data[['No_1_RowFrontGTI', 'No_2_RowFrontGTI','No_3_RowFrontGTI','No_4_RowFrontGTI','No_5_RowFrontGTI','No_6_RowFrontGTI']].mean(axis=1)
+        composite_data['GTIBackavg'] =composite_data[['No_1_RowBackGTI', 'No_2_RowBackGTI','No_3_RowBackGTI','No_4_RowBackGTI','No_5_RowBackGTI','No_6_RowBackGTI']].mean(axis=1)
+        print('Composite Data 1: ', composite_data)
+        #C - DNI & Alb to 0 - Only thing available is DHI from other sources
+        myTMY3_DNIALB0 = myTMY3.copy()
+        myTMY3_DNIALB0.loc[:, "DNI"] = 0
+        myTMY3_DNIALB0.loc[:, "Alb"] = 0
+        write_file_DNIALB0 = writefiletitle[:-4] + "_DNIALB0.csv"
+        myTMY3_DNIALB0.to_csv('DNIALB0_weather.csv')
+        simulate(myTMY3=myTMY3_DNIALB0, meta=meta, writefiletitle=write_file_DNIALB0, tilt=tilt, sazm=sazm, 
+             clearance_height=clearance_height, hub_height = hub_height, 
+             pitch=pitch, rowType='interior', transFactor=transFactor, sensorsy=sensorsy, 
+             PVfrontSurface='glass', PVbackSurface='glass', albedo=0,  
+             tracking=tracking, backtrack=backtrack, limit_angle=limit_angle,
+             calculatePVMismatch=calculatePVMismatch, cellsnum= cellsnum, 
+             portraitorlandscape=portraitorlandscape, bififactor = bififactor,
+             calculateBilInterpol=calculateBilInterpol, BilInterpolParams=BilInterpolParams,
+             deltastyle=deltastyle, agriPV=agriPV)
+        (data, metadata) = loadVFresults(write_file_DNIALB0)
+        # composite_data["Avg_RowBackGTI_DHIDirect"] = 0
+        for x in np.arange(1, sensorsy+1, 1):
+            for fb in front_back_list:
+                avg_string = "Avg_Row" + str(fb) + "GTI_DHIDirect"
+                composite_data[avg_string] = 0
+                #data.loc[:, "No_"+str(x)+"_RowBackGTI"] = data.loc[:, "No_"+str(x)+"_RowBackGTI"] - composite_data.loc[:, "No_"+str(x)+"_RowBackGTI_DNI0"]
+                old_string = "No_"+str(x)+"_Row" + str(fb) + "GTI" 
+                new_string = "No_"+str(x) + "_Row" + str(fb) + "GTI_DHIDirect"
+                composite_data[new_string] = data[old_string]
+                composite_data[avg_string] = composite_data[avg_string] + (composite_data[new_string]/sensorsy)
+        #composite_data["Avg_RowBackGTI_DHIDirect"] = composite_data["Avg_RowBackGTI_DHIDirect"]
+        #data.rename(dict)
+        #composite_data = pd.concat([composite_data, data])
+        print('Composite Data 2: ', composite_data)
+        #D - DHI & Alb to 0 - only thing available is DNI from other sources
+        myTMY3_DHIALB0 = myTMY3.copy()
+        myTMY3_DHIALB0.loc[:, "DHI"] = 0
+        myTMY3_DHIALB0.loc[:, "Alb"] = 0
+        myTMY3_DHIALB0.to_csv('DHIALB0_weather.csv')
+        write_file_DHIALB0 = writefiletitle[:-4] + "_DHIALB0.csv"
+        simulate(myTMY3=myTMY3_DHIALB0, meta=meta, writefiletitle=write_file_DHIALB0, tilt=tilt, sazm=sazm, 
+             clearance_height=clearance_height, hub_height = hub_height, 
+             pitch=pitch, rowType='interior', transFactor=transFactor, sensorsy=sensorsy, 
+             PVfrontSurface='glass', PVbackSurface='glass', albedo=0,  
+             tracking=tracking, backtrack=backtrack, limit_angle=limit_angle,
+             calculatePVMismatch=calculatePVMismatch, cellsnum= cellsnum, 
+             portraitorlandscape=portraitorlandscape, bififactor = bififactor,
+             calculateBilInterpol=calculateBilInterpol, BilInterpolParams=BilInterpolParams,
+             deltastyle=deltastyle, agriPV=agriPV)
+        
+        (data, metadata) = loadVFresults(write_file_DHIALB0)
+        # composite_data["Avg_RowBackGTI_DNIDirect"] = 0
+        for x in np.arange(1, sensorsy+1, 1):
+            #data.loc[:, "No_"+str(x)+"_RowBackGTI"] = data.loc[:, "No_"+str(x)+"_RowBackGTI"] - composite_data.loc[:, "No_"+str(x)+"_RowBackGTI_DHI0"]
+            for fb in front_back_list:
+                avg_string = "Avg_Row" + str(fb) + "GTI_DNIDirect"
+                composite_data[avg_string] = 0
+                #data.loc[:, "No_"+str(x)+"_RowBackGTI"] = data.loc[:, "No_"+str(x)+"_RowBackGTI"] - composite_data.loc[:, "No_"+str(x)+"_RowBackGTI_DNI0"]
+                old_string = "No_"+str(x)+"_Row" + str(fb) + "GTI" 
+                new_string = "No_"+str(x) + "_Row" + str(fb) + "GTI_DNIDirect"
+                composite_data[new_string] = data[old_string]
+                composite_data[avg_string] = composite_data[avg_string] + (composite_data[new_string]/sensorsy)
+            
+        #composite_data["Avg_RowBackGTI_DNIDirect"] = composite_data["Avg_RowBackGTI_DNIDirect"] 
+        #data.rename(dict)
+        #composite_data = pd.concat([composite_data, data])
+        print('Composite Data 3: ', composite_data)
+        #C - DHI to 0 - DNI from ground + other sources, subtract other sources
+        myTMY3_DHI0 = myTMY3.copy()
+        myTMY3_DHI0.loc[:,'DHI'] = 0
+        myTMY3_DHI0.to_csv('DHI0_weather.csv')
+        write_file_DHI0 = writefiletitle[:-4] + "_DHI0.csv"
+        # dict = {}
+        simulate(myTMY3=myTMY3_DHI0, meta=meta, writefiletitle=write_file_DHI0, tilt=tilt, sazm=sazm, 
+             clearance_height=clearance_height, hub_height = hub_height, 
+             pitch=pitch, rowType='interior', transFactor=transFactor, sensorsy=sensorsy, 
+             PVfrontSurface='glass', PVbackSurface='glass', albedo=albedo,  
+             tracking=tracking, backtrack=backtrack, limit_angle=limit_angle,
+             calculatePVMismatch=calculatePVMismatch, cellsnum= cellsnum, 
+             portraitorlandscape=portraitorlandscape, bififactor = bififactor,
+             calculateBilInterpol=calculateBilInterpol, BilInterpolParams=BilInterpolParams,
+             deltastyle=deltastyle, agriPV=agriPV)
+        (data, metadata) = loadVFresults(write_file_DHI0)
+        # composite_data["Avg_RowBackGTI_DNIReflected"] = 0
+        for x in np.arange(1, sensorsy+1, 1):
+            for fb in front_back_list:
+                avg_string = "Avg_Row" + str(fb) + "GTI_DNIReflected"
+                composite_data[avg_string] = 0
+                #data.loc[:, "No_"+str(x)+"_RowBackGTI"] = data.loc[:, "No_"+str(x)+"_RowBackGTI"] - composite_data.loc[:, "No_"+str(x)+"_RowBackGTI_DNI0"]
+                old_string = "No_"+str(x)+"_Row" + str(fb) + "GTI" 
+                new_string = "No_"+str(x) + "_Row" + str(fb) + "GTI_DNIReflected"
+                composite_data[new_string] = data[old_string]
+                composite_data[avg_string] = composite_data[avg_string] + (composite_data[new_string]/sensorsy)
+            
+
+        #data.rename(dict)
+        #composite_data = pd.concat([composite_data, data])
+        print('Composite Data 4: ', composite_data)
+        #B - DNI to 0, DHI from ground and other sources, subtract other sources
+        myTMY3_DNI0 = myTMY3.copy()
+        myTMY3_DNI0.loc[:, "DNI"] = 0
+        myTMY3_DNI0.to_csv('DNI0_weather.csv')
+        write_file_DNI0 = writefiletitle[:-4] + "_DNI0.csv"
+        simulate(myTMY3=myTMY3_DNI0, meta=meta, writefiletitle=write_file_DNI0, tilt=tilt, sazm=sazm, 
+             clearance_height=clearance_height, hub_height = hub_height, 
+             pitch=pitch, rowType='interior', transFactor=transFactor, sensorsy=sensorsy, 
+             PVfrontSurface='glass', PVbackSurface='glass', albedo=albedo,  
+             tracking=tracking, backtrack=backtrack, limit_angle=limit_angle,
+             calculatePVMismatch=calculatePVMismatch, cellsnum= cellsnum, 
+             portraitorlandscape=portraitorlandscape, bififactor = bififactor,
+             calculateBilInterpol=calculateBilInterpol, BilInterpolParams=BilInterpolParams,
+             deltastyle=deltastyle, agriPV=agriPV)
+        (data, metadata) = loadVFresults(write_file_DNI0)
+        # composite_data["Avg_RowBackGTI_DHIReflected"] = 0
+        for x in np.arange(1, sensorsy+1, 1):
+            for fb in front_back_list:
+                avg_string = "Avg_Row" + str(fb) + "GTI_DHIReflected"
+                composite_data[avg_string] = 0
+                #data.loc[:, "No_"+str(x)+"_RowBackGTI"] = data.loc[:, "No_"+str(x)+"_RowBackGTI"] - composite_data.loc[:, "No_"+str(x)+"_RowBackGTI_DNI0"]
+                old_string = "No_"+str(x)+"_Row" + str(fb) + "GTI" 
+                new_string = "No_"+str(x) + "_Row" + str(fb) + "GTI_DHIReflected"
+                composite_data[new_string] = data[old_string]
+                composite_data[avg_string] = composite_data[avg_string] + (composite_data[new_string]/sensorsy)
+            
+        #data.rename(dict)
+        #composite_data = pd.concat([composite_data, data])
+        print('Composite Data 5: ',composite_data)
+        composite_data.index = pd.to_datetime(composite_data['date'])
+        print('Composite Data Index: ', composite_data)
+        spectra_files = next(os.walk(spectral_file_path))[2]
+        spectra_files.sort()
+        temp = pd.read_csv(os.path.join(spectral_file_path, spectra_files[0]))
+        temp.index = pd.to_datetime(temp['Date (MM/DD/YYYY)'] + ' ' + temp['Time (HH:MM)'], format='%m/%d/%Y %H:%M')
+        year = temp.index[0].year
+        print("Year from spectral file: ", year)
+        print("Before reindexing, composite_data : ", composite_data)
+        composite_data.index = composite_data.index.map(lambda dt: dt.replace(year=year))
+        print(composite_data)
+        full_year = pd.date_range(start="1/1/"+str(composite_data.index[0].year)+" 00:"+str(composite_data.index[0].minute), periods=8760, freq = '1h', tz=composite_data.index[0].tzinfo)
+        composite_data = composite_data.reindex(full_year, fill_value=0)
+        composite_data['date'] = composite_data.index
+
+        #lambda_range = np.arange(min_lambda, max_lambda, lambda_iter)
+        lambda_range = lambda_range
+
+        weather_df = myTMY3.copy()
+        if 'Alb' not in weather_df.columns:
+            weather_df['Alb'] = albedo
+        #spectral_file_path = ''
+        #weather_df.index = composite_data.index
+        weather_df.index = weather_df.index.map(lambda dt: dt.replace(year=year))
+        weather_df = weather_df.reindex(composite_data.index, fill_value=0)
+        print(weather_df.index)
+        integrated_spectrum = integrated_spectrum.reindex(composite_data.index, fill_value=0)
+        Sum_DNI = integrated_spectrum['Sum_DNI']
+        Sum_DHI = integrated_spectrum['Sum_DHI']
+        Sum_DNI_ALB = integrated_spectrum['Sum_DNI_ALB']
+        Sum_DHI_ALB = integrated_spectrum['Sum_DHI_ALB']
+
+#         # Determine Seasonal ground cover, if necessary
+#         north = [1,2,3,4,10,11,12]
+#         south = [5,6,7,8,9,10]
+#         if meta["latitude"] < 0: winter = north
+#         if meta["latitude"] > 0: winter = south
+# #TODO implement snow logic
+#         if ground_material == 'Seasonal':
+#             MONTH = metdata.datetime[idx].month
+#             if MONTH in winter :
+#                 if alb >= 0.6:
+#                     ground_material = 'Snow'
+#                 else:
+#                     ground_material = 'DryGrass'
+#             else:
+#                 ground_material = 'Grass'
+        
+        # isSnow = False
+        print('Spectral file path: ', spectral_file_path)
+        for file in os.listdir(spectral_file_path):
+            #spec_tmy = pd.read_csv(spectral_file_path + "/" + file, skiprows=1)
+            spec_tmy = pd.read_csv(spectral_file_path + "/" + file)
+            spec_tmy.index = pd.to_datetime(spec_tmy['Date (MM/DD/YYYY)'] + ' ' + spec_tmy['Time (HH:MM)'], format='%m/%d/%Y %H:%M')
+            year = composite_data.index[0].year
+            spec_tmy.index = spec_tmy.index.map(lambda dt: dt.replace(year=year))
+            spec_tmy.index = spec_tmy.index.tz_localize(composite_data.index[0].tzinfo)
+            print(spec_tmy)
+            print(spec_tmy.index.duplicated().any())
+            print(spec_tmy.loc[:, spec_tmy.columns.duplicated()])
+            # spec_tmy.index = weather_df.index
+            spec_tmy = spec_tmy.reindex(weather_df.index)
+
+           # Get the day of the year for each entry
+            # day_of_year_values = didx.dayofyear
+            weather_df['Alb_type'] = ''
+            if custom_albedo_dict is not None:
+                for key, value in custom_albedo_dict.items():
+                    print(key)
+                    print(custom_albedo_dict[key])
+                    if ('DayOfYear' in custom_albedo_dict[key] and 'isSnow' not in custom_albedo_dict[key]):
+                        start_date = int(custom_albedo_dict[key]['DayOfYear'])
+                        weather_df.loc[weather_df.index.dayofyear >= start_date, 'Alb_type'] = key
+                    elif('DayOfYear' not in custom_albedo_dict[key] and 'isSnow' in custom_albedo_dict[key]):
+                        isSnow = custom_albedo_dict[key]['isSnow']
+                        if isSnow:
+                            weather_df.loc[weather_df['Alb'] > 0.6, 'Alb_type'] = key
+                    elif('DayOfYear' in custom_albedo_dict[key] and 'isSnow' in custom_albedo_dict[key]):
+                        start_date = int(custom_albedo_dict[key]['DayOfYear'])
+                        isSnow = custom_albedo_dict[key]['isSnow']
+                        if isSnow:
+                            weather_df.loc[weather_df.index.dayofyear >= start_date & weather_df['Alb'] > 0.6, 'Alb_type'] = key
+                    else:
+                        start_date = 1
+                        weather_df.loc[weather_df.index.dayofyear >= start_date, 'Alb_type'] = key
+                    # isSnow = False
+                    # if ('isSnow' in custom_albedo_dict[key]):
+                    #     isSnow = custom_albedo_dict[key]['isSnow']
+                    # if isSnow:
+                    #     weather_df.loc[weather_df['Alb'] > 0.6, 'Alb_type'] = key
+            
+            unique_keys = weather_df['Alb_type'].unique()   
+            num_from_str = int(file[-8:-4])
+            if num_from_str in lambda_range:
+                weather_df['DNI_' + file[-8:-4]] = spec_tmy['DNI']
+                weather_df['DHI_' + file[-8:-4]] = spec_tmy['DHI']
+                if custom_albedo_dict is None:
+                    weather_df['ALB_' + file[-8:-4]] = spec_tmy['ALB']
+                else:
+                    for key in unique_keys:
+                        if key == '':
+                            weather_df.loc[weather_df['Alb_type'] == key, 'ALB_' + file[-8:-4]] = spec_tmy['ALB']
+                        elif custom_albedo_dict[key] is not None:
+                            weather_df['ALB_' + file[-8:-4]] = spec_tmy['ALB'] #Initialize albedo
+                            dict_alb = custom_albedo_dict[key]['albedo'].split(',')
+                            dict_alb = np.array([float(i)/100.0 for i in dict_alb])
+                            dict_wave = custom_albedo_dict[key]['wavelength'].split(',')
+                            dict_wave = np.array([float(i) for i in dict_wave])
+                            weather_df.loc[weather_df['Alb_type'] == key, 'ALB_' + file[-8:-4]] = np.interp(num_from_str, dict_wave, dict_alb)
+                        else:
+                            print("Custom albedo for ", key, " not provided, setting to 0")
+
+                   #weather_df['ALB_' + file[-8:-4]] = 0
+                    
+                # if custom_albedo_dict['Summer'] is None: 
+                #     weather_df.loc[~weather_df.index.month.isin(winter), 'ALB_' + file[-8:-4]] = spec_tmy['ALB']
+                # else:
+                #     dict_alb_summer = custom_albedo_dict['Summer']['albedo'].split(',')
+                #     dict_alb_summer = np.array([float(i)/100.0 for i in dict_alb_summer])
+                #     dict_wave_summer = custom_albedo_dict['Summer']['wavelength'].split(',')
+                #     dict_wave_summer = np.array([float(i) for i in dict_wave_summer])
+                #     print(dict_alb_summer)
+                #     weather_df.loc[~weather_df.index.month.isin(winter), 'ALB_' + file[-8:-4]] = np.interp(num_from_str, dict_wave_summer, dict_alb_summer)
+
+                # if custom_albedo_dict['Winter'] is None:
+                #     weather_df.loc[weather_df.index.month.isin(winter), 'ALB_' + file[-8:-4]] = spec_tmy['ALB']
+                # else:
+                #     dict_alb_winter = custom_albedo_dict['Winter']['albedo'].split(',')
+                #     dict_alb_winter = np.array([float(i)/100.0 for i in dict_alb_winter])
+                    
+                #     dict_wave_winter = custom_albedo_dict['Winter']['wavelength'].split(',')
+                #     dict_wave_winter = np.array([float(i) for i in dict_wave_winter])
+                #     weather_df.loc[weather_df.index.month.isin(winter), 'ALB_' + file[-8:-4]] = np.interp(num_from_str, dict_wave_winter, dict_alb_winter)
+                    
+                    #weather_df['ALB_' + file[-8:-4]] = custom_albedo_df['ALB_' + file[-8:-4]]
+                    
+                
+        weather_df.to_csv('weather_df.csv')
+
+        #Testing using weather file total irradiance instead of integrated spectrum results for speed
+        Sum_DNI = weather_df['DNI']
+        Sum_DHI = weather_df['DHI']
+        Sum_DNI_ALB = weather_df['DNI'] * weather_df['Alb']
+        Sum_DHI_ALB = weather_df['DHI'] * weather_df['Alb']
+
+        agg_cols_front = []
+        agg_cols_rear = []
+        wavelength_str_front = 'Spectra_front: [ '
+        wavelength_str_rear = 'Spectra_rear: [ '
+        #wavelength_str = 'Irradiance: ['
+        for x in lambda_range:
+            for fb in front_back_list:
+                if (fb == "Front"):
+                    header = "front"
+                    agg_cols_front.append('G_' + str(header) + '_' + str(x))
+                    wavelength_str_front += str(x) + ', '
+                else:
+                    header = "rear"
+                    agg_cols_rear.append('G_' + str(header) + '_' + str(x))
+                    wavelength_str_rear += str(x) + ', '
+                
+                
+                composite_data['G_' + str(header) + '_DNI_' + str(x)] = composite_data['Avg_Row' + str(fb) + 'GTI_DNIDirect'] / Sum_DNI.mask(Sum_DNI == 0) * weather_df['DNI_0' + str(x)]
+                composite_data['G_' + str(header) + '_DNI_' + str(x)] = composite_data['G_' + str(header) + '_DNI_' + str(x)].fillna(0)
+                composite_data['G_' + str(header) + '_DHI_' + str(x)] = composite_data['Avg_Row' + str(fb) + 'GTI_DHIDirect'] / Sum_DHI.mask(Sum_DHI == 0) * weather_df['DHI_0' + str(x)]
+                composite_data['G_' + str(header) + '_DHI_' + str(x)] = composite_data['G_' + str(header) + '_DHI_' + str(x)] .fillna(0)
+                composite_data['G_' + str(header) + '_DNI_reflected_' + str(x)] = composite_data['Avg_Row' + str(fb) + 'GTI_DNIReflected'] / Sum_DNI_ALB.mask(Sum_DNI_ALB == 0) * weather_df['DNI_0' + str(x)] * weather_df['ALB_0' + str(x)]
+                composite_data['G_' + str(header) + '_DNI_reflected_' + str(x)] = composite_data['G_' + str(header) + '_DNI_reflected_' + str(x)].fillna(0)
+                composite_data['G_' + str(header) + '_DHI_reflected_' + str(x)] = composite_data['Avg_Row' + str(fb) + 'GTI_DHIReflected'] / Sum_DHI_ALB.mask(Sum_DHI_ALB == 0) * weather_df['DHI_0' + str(x)] * weather_df['ALB_0' + str(x)]
+                composite_data['G_' + str(header) + '_DHI_reflected_' + str(x)] = composite_data['G_' + str(header) + '_DHI_reflected_' + str(x)].fillna(0)
+                composite_data['G_' + str(header) + '_' + str(x)] = composite_data['G_' + str(header) + '_DNI_' + str(x)] + composite_data['G_' + str(header) + '_DHI_' + str(x)] + composite_data['G_' + str(header) + '_DNI_reflected_' + str(x)] + composite_data['G_' + str(header) + '_DHI_reflected_' + str(x)]
+        
+        wavelength_str_front += ']'
+        wavelength_str_rear += ']'
+        final_output = weather_df[['DryBulb']].copy()
+        # final_output = final_output.rename(columns={'relative_humidity': 'RH', 'DryBulb': 'Temperature'})
+        final_output = final_output.rename(columns={'DryBulb': 'Temperature'})
+        # final_output = final_output.join(composite_data[agg_cols].agg(dict,axis=1)
+        #                         .to_frame(wavelength_str))
+        final_output = final_output.join(composite_data[agg_cols_front].agg(list,axis=1)
+                                .to_frame(wavelength_str_front))
+        final_output = final_output.join(composite_data[agg_cols_rear].agg(list,axis=1)
+                                .to_frame(wavelength_str_rear))
+        final_output.to_csv(writefiletitle[:-4] + "_composite.csv")
+        final_output.to_pickle(writefiletitle[:-4] + "_composite.pkl")
+        # composite_data.to_csv(writefiletitle[:-4] + "_composite.csv")
+        # composite_data.to_pickle(writefiletitle[:-4] + "_composite.pkl")
+        return final_output
+
         
 if __name__ == "__main__":    
 
     # IO Files
     TMYtoread="data/724010TYA.csv"   # VA Richmond
     writefiletitle="data/Output/Test_RICHMOND_1.0.csv"
+    composition_file = "data/Output/Test_sky_composition.csv"
 
     # Variables
     tilt = 10                   # PV tilt (deg)
@@ -630,6 +1017,16 @@ if __name__ == "__main__":
     deltastyle = 'TMY3'
     # Function
     simulate(myTMY3, meta, writefiletitle=writefiletitle, 
+             tilt=tilt, sazm=sazm, pitch=pitch, clearance_height=clearance_height, 
+             rowType=rowType, transFactor=transFactor, sensorsy=sensorsy, 
+             PVfrontSurface=PVfrontSurface, PVbackSurface=PVbackSurface, 
+             albedo=albedo, tracking=tracking, backtrack=backtrack, 
+             limit_angle=limit_angle, calculatePVMismatch=calculatePVMismatch,
+             cellsnum = cellsnum, bififactor=bififactor,
+             calculateBilInterpol=calculateBilInterpol,
+             portraitorlandscape=portraitorlandscape, deltastyle=deltastyle)
+    
+    skycomposition_method(myTMY3, meta, writefiletitle=composition_file, 
              tilt=tilt, sazm=sazm, pitch=pitch, clearance_height=clearance_height, 
              rowType=rowType, transFactor=transFactor, sensorsy=sensorsy, 
              PVfrontSurface=PVfrontSurface, PVbackSurface=PVbackSurface, 
