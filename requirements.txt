@@ -8,7 +8,7 @@ pandas==2.0.3
 pvmismatch==4.1
 py==1.11.0
 pyparsing==3.0.9
-pytest==7.2.2
+pytest==9.0.3
 pytest-cov==4.0.0
 python-dateutil==2.9.0.post0
 pytz==2023.3.post1
