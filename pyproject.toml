@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools_scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bifacialvf"
+dynamic = ["version", "readme"]
+description = "Bifacial PV system evaluation using view factor method"
+license = { text = "BSD" }
+authors = [
+    { name = "Chris Deline", email = "chris.deline@nrel.gov" },
+]
+keywords = ["bifacial", "view factor", "photovoltaics", "pv"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pvlib > 0.6.1",
+    "pvmismatch",
+    "tqdm >= 4.32.1",
+]
+
+[project.optional-dependencies]
+all = [
+    "ipython",
+    "jupyter",
+    "sphinx >= 1.8.0",
+    "sphinx-autoapi >= 1.1.0",
+    "sphinx-rtd-theme >= 0.4.3",
+    "pytest",
+    "pytest-cov",
+]
+
+[project.urls]
+Homepage = "https://github.com/NREL/bifacialvf"
+
+[tool.setuptools.dynamic]
+readme = { file = "README.md", content-type = "text/markdown" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+bifacialvf = [
+    "data/722740TYA.CSV",
+    "data/723260TYA.CSV",
+    "data/723560TYA.CSV",
+    "data/724010TYA.CSV",
+    "data/724666TYA.CSV",
+    "data/727930TYA.CSV",
+    "data/USA_VA_Richmond.Intl.AP.724010_TMY.epw",
+]
+
+[tool.setuptools_scm]
+write_to = "bifacialvf/_version.py"
+
+[tool.pytest.ini_options]
+addopts = "--verbose"
