@@ -548,7 +548,7 @@ def simulate(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180,
                     # TODO: Modify so it works with axis_azm different of 0 
                     #        (sazm = 90 or 270 only)
                     if tracking == True:                                   
-                        if sazm == 270.0:
+                        if np.sin(sazm/180 * math.pi) < 0:
                             rangestart = sensorsy-1
                             rangeend = -1
                             steprange = -1
@@ -576,7 +576,7 @@ def simulate(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180,
                         outputvalues.append(D)
 
                     if agriPV:
-                        outputvalues.append(str(rearGroundGHI).replace(',', ''))
+                        outputvalues.append(' '.join([str(float(v)) for v in rearGroundGHI]))
                         
                     sw.writerow(outputvalues)
     

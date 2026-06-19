@@ -128,6 +128,7 @@ def test_1axis_endtoend():
     tracking=True
     backtrack=True
     limit_angle = 60
+    agriPV = True
     
     deltastyle = 'TMY3'
     # Calculate PV Output Through Various Methods    
@@ -143,7 +144,7 @@ def test_1axis_endtoend():
              rowType=rowType, transFactor=transFactor, sensorsy=sensorsy, 
              PVfrontSurface=PVfrontSurface, PVbackSurface=PVbackSurface, 
              albedo=albedo, tracking=tracking, backtrack=backtrack, 
-             limit_angle=limit_angle, deltastyle=deltastyle)
+             limit_angle=limit_angle, deltastyle=deltastyle, agriPV=agriPV)
                                         
     #Load the results from the resultfile
     from bifacialvf import loadVFresults
@@ -154,6 +155,8 @@ def test_1axis_endtoend():
     data['GTIBackavg'] = data[['No_1_RowBackGTI', 'No_2_RowBackGTI','No_3_RowBackGTI','No_4_RowBackGTI','No_5_RowBackGTI','No_6_RowBackGTI']].mean(axis=1)
     assert np.allclose(data['GTIFrontavg'].array, TRACKED_ENDTOEND_GTIFRONT)
     assert np.allclose(data['GTIBackavg'].array, TRACKED_ENDTOEND_GTIBACK)
+    assert np.round(np.mean(data['Ground Irradiance Values'].iloc[6]),1) == 111.2
+
 
 def test_bilininterpol():
     import pandas as pd
