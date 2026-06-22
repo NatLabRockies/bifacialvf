@@ -1,6 +1,6 @@
 .. _whatsnew_0108:
 
-v1.8 (18 / 03 / 2022)
+v0.1.8 (March 18, 2022)
 =====================
 
 * ``agriPV`` as input, so that .csv output has the Ground irradiance at every timestep. The ground irradiance is given in 100 segments between start of the module and start of the module in the next row. 
