@@ -1,0 +1,28 @@
+.. _whatsnew_020:
+
+v0.2.0 (June 22, 2026)
+======================
+
+Enhancements
+~~~~~~~~~~~~
+* Python version support updated: Py3.10 through Py3.14.  Prior versions may still work but are untested. (:pull:`64`)
+* NSRDB PSM4 files can now be loaded with bifacialvf.readInputTMY() (:issue:`55`)
+
+Bug fixes
+~~~~~~~~~
+* With ``agriPV==True``, output file now prints as space separated array and reads back in as np.array object. Values rounded to 4 significant digits. (:pull:`64`)
+* Azimuth=270 logic error fixed with tracking systems (:issue:`61`)
+* iStopIso > 180 limit error fixed.  (:issue:`53`)
+
+Documentation
+~~~~~~~~~~~~~~
+* Improved pytests. (:pull:`64`)
+* Updated to pyproject.toml setup file. (:pull:`64`)
+
+
+Contributors
+~~~~~~~~~~~~
+* Silvana Ovaitt (:ghuser:`shirubana`)
+* Chris Deline (:ghuser:`cdeline`)
+* Mark Mikofski (:ghuser:`mikofski`)
+* Kevin Anderson (:ghuser:`kandersolar`)

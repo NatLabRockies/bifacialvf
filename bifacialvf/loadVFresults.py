@@ -68,9 +68,13 @@ def loadVFresults(filename=None):
     
  
     
+    import numpy as np
     data = pd.read_csv(filename, skiprows=1, header=1)
 
-    
+    if 'Ground Irradiance Values' in data.columns:
+        data['Ground Irradiance Values'] = data['Ground Irradiance Values'].apply(
+            lambda s: np.fromstring(s.strip('[]').replace(',', ' '), sep=' ') if isinstance(s, str) else s)
+
     return data, meta
 #
 #class Program:

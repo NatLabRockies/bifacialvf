@@ -608,7 +608,7 @@ def getFrontSurfaceIrradiances(rowType, maxShadow, PVfrontSurface, beta, sazm,
             print( "division is Nan")
         
         
-        iStopIso = int(round(np.float64((math.pi - beta - elvUP)) / DTOR)) # Last whole degree in arc range that sees sky, first is 0
+        iStopIso = min(180, int(round(np.float64((math.pi - beta - elvUP)) / DTOR))) # Last whole degree in arc range that sees sky, first is 0
         #Console.WriteLine("iStopIso = 0", iStopIso);
         iHorBright = int(round(max(0.0, 6.0 - elvUP / DTOR)));    # Number of whole degrees for which horizon brightening occurs
         iStartGrd = int(round((math.pi - beta + elvDOWN) / DTOR));     # First whole degree in arc range that sees ground, last is 180

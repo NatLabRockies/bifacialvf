@@ -127,7 +127,6 @@ on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 if not on_rtd:  # only import and set the theme if we're building docs locally
     import sphinx_rtd_theme
     html_theme = 'sphinx_rtd_theme'
-    html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 else:
     html_theme = 'default'
 
@@ -144,7 +143,7 @@ htmlhelp_basename = 'bifacialvfdoc'
 
 # A workaround for the responsive tables always having annoying scrollbars.
 def setup(app):
-    app.add_stylesheet("no_scrollbars.css")
+    app.add_css_file("no_scrollbars.css")
     
 """    
 # -- Options for LaTeX output ---------------------------------------------
@@ -189,11 +188,11 @@ latex_documents = [
 #latex_domain_indices = True
 """
 # extlinks alias
-extlinks = {'issue': ('https://github.com/NREL/bifacialvf/issues/%s', 'GH'),
-            'pull': ('https://github.com/NREL/bifacialvf/pull/%s', 'GH'),
-            'wiki': ('https://github.com/NREL/bifacialvf/wiki/%s', 'wiki '),
-            'doi': ('http://dx.doi.org/%s', 'DOI: '),
-            'ghuser': ('https://github.com/%s', '@')}
+extlinks = {'issue': ('https://github.com/NREL/bifacialvf/issues/%s', 'GH %s'),
+            'pull': ('https://github.com/NREL/bifacialvf/pull/%s', 'GH %s'),
+            'wiki': ('https://github.com/NREL/bifacialvf/wiki/%s', 'wiki %s'),
+            'doi': ('http://dx.doi.org/%s', 'DOI: %s'),
+            'ghuser': ('https://github.com/%s', '@%s')}
 """
 # -- Options for manual page output ---------------------------------------
 

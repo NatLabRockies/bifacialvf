@@ -99,7 +99,21 @@ def test_endtoend():
     assert np.allclose(list(round(data['GTIBackavg'][1:4],1)), list(round(data_Marion['GTIBackavg'][1:4],1)))
     assert np.allclose(list(round(data['GTIbackBroadBand'][1:10],1)), list(round(data_Marion['GTIbackBroadBand'][1:10],1)))    
 
-
+    # Load 30-minute Golden data
+    TMYtoread2=os.path.join(DATADIR,"Golden_CO_nsrdb-GOES-30.csv")   # VA Richmond 724010TYA.csv
+    writefiletitle2=os.path.join(DATADIR,"_Golden_30.csv")
+    myPSM, meta2 = bifacialvf.bifacialvf.readInputTMY(TMYtoread2)
+    myPSM_2 = myPSM.iloc[0:48].copy()
+    # Simulate just the first 24 hours of the Golden data file
+    bifacialvf.simulate(myPSM_2, meta2, writefiletitle=writefiletitle2, 
+             tilt=tilt, sazm=sazm, pitch=pitch, clearance_height=clearance_height, 
+             rowType=rowType, transFactor=transFactor, sensorsy=sensorsy, 
+             PVfrontSurface=PVfrontSurface, PVbackSurface=PVbackSurface, 
+             albedo=albedo, tracking=tracking, backtrack=backtrack, 
+             limit_angle=limit_angle, deltastyle=deltastyle)
+    (data2, metadata2) = loadVFresults(writefiletitle2)
+    assert np.round(data2.No_1_RowBackGTI.mean(),3) ==  20.508
+    
 def test_1axis_endtoend():
     '''
     end to end test, first 24 hours of VA Richmond .EPW file
@@ -128,6 +142,7 @@ def test_1axis_endtoend():
     tracking=True
     backtrack=True
     limit_angle = 60
+    agriPV = True
     
     deltastyle = 'TMY3'
     # Calculate PV Output Through Various Methods    
@@ -143,7 +158,7 @@ def test_1axis_endtoend():
              rowType=rowType, transFactor=transFactor, sensorsy=sensorsy, 
              PVfrontSurface=PVfrontSurface, PVbackSurface=PVbackSurface, 
              albedo=albedo, tracking=tracking, backtrack=backtrack, 
-             limit_angle=limit_angle, deltastyle=deltastyle)
+             limit_angle=limit_angle, deltastyle=deltastyle, agriPV=agriPV)
                                         
     #Load the results from the resultfile
     from bifacialvf import loadVFresults
@@ -154,6 +169,8 @@ def test_1axis_endtoend():
     data['GTIBackavg'] = data[['No_1_RowBackGTI', 'No_2_RowBackGTI','No_3_RowBackGTI','No_4_RowBackGTI','No_5_RowBackGTI','No_6_RowBackGTI']].mean(axis=1)
     assert np.allclose(data['GTIFrontavg'].array, TRACKED_ENDTOEND_GTIFRONT)
     assert np.allclose(data['GTIBackavg'].array, TRACKED_ENDTOEND_GTIBACK)
+    assert np.round(np.mean(data['Ground Irradiance Values'].iloc[6]),1) == 111.2
+
 
 def test_bilininterpol():
     import pandas as pd
