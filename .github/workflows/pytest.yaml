@@ -18,6 +18,7 @@ jobs:
           '-r requirements.txt .[all]'
         ]
         include:
+          - python-version: "3.8"
           - python-version: "3.13"
             env: '--upgrade --upgrade-strategy=eager .[all]'
           - python-version: "3.14"
