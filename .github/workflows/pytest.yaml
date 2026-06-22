@@ -13,7 +13,7 @@ jobs:
         # Test two environments:
         # 1) dependencies with pinned versions from requirements.txt
         # 2) 'pip install --upgrade --upgrade-strategy=eager .' to install upgraded
-        #    dependencies from PyPi using version ranges defined within setup.py
+        #    dependencies from PyPI using version ranges defined within pyproject.toml
         env: [
           '-r requirements.txt .[all]'
         ]

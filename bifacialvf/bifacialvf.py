@@ -576,7 +576,7 @@ def simulate(myTMY3, meta, writefiletitle=None, tilt=0, sazm=180,
                         outputvalues.append(D)
 
                     if agriPV:
-                        outputvalues.append(' '.join([str(float(v)) for v in rearGroundGHI]))
+                        outputvalues.append("[" + ' '.join([str(round(float(v), 4)) for v in rearGroundGHI]) + "]")
                         
                     sw.writerow(outputvalues)
     

@@ -73,7 +73,7 @@ def loadVFresults(filename=None):
 
     if 'Ground Irradiance Values' in data.columns:
         data['Ground Irradiance Values'] = data['Ground Irradiance Values'].apply(
-            lambda s: np.fromstring(s, sep=' ') if isinstance(s, str) else s)
+            lambda s: np.fromstring(s.strip('[]').replace(',', ' '), sep=' ') if isinstance(s, str) else s)
 
     return data, meta
 #
