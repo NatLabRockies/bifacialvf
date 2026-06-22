@@ -50,8 +50,7 @@ def readInputTMY(TMYtoread):
     ----------
     TMYtoread: TMY3 .csv weather file, which can be downloaded at http://rredc.nrel.gov/solar/old_data/nsrdb/1991-2005/tmy3/by_state_and_city.html
                    Also .epw weather files, which can be downloaded here: https://energyplus.net/weather and here: http://re.jrc.ec.europa.eu/pvg_tools/en/tools.html#TMY
-    
-    Returns
+                   as well as NSRDB PSM4 files, which can be downloaded here: https://developer.nlr.gov/docs/solar/nsrdb/
     dataframe, meta
         
     '''
@@ -61,7 +60,11 @@ def readInputTMY(TMYtoread):
             (myTMY3,meta)=pvlib.iotools.read_tmy3(TMYtoread, map_variables=True)
         except TypeError:
             (myTMY3,meta)=pvlib.iotools.read_tmy3(TMYtoread)
+        except ValueError:
+            # try PSM3 format (e.g. NSRDB download) - read_tmy3 fails on its header
+            (myTMY3,meta) = pvlib.iotools.read_nsrdb_psm4(TMYtoread, map_variables=True)
         return(myTMY3,meta)
+
     
     if TMYtoread is None: # if no file passed in, the readtmy3 graphical file picker will open.
         (myTMY3,meta)=_tmy_reader(TMYtoread)  # , coerce_year=2001     
@@ -77,10 +80,19 @@ def readInputTMY(TMYtoread):
     
     myTMY3.rename(columns={'dni':'DNI', 'ghi':'GHI',
                            'dhi':'DHI',
+                           'Temperature':'DryBulb',
                            'temp_air':'DryBulb',
+                           'Tdry':'DryBulb',
                            'wind_speed':'Wspd',
+                           'Wind Speed':'Wspd',
+                           'Surface albedo':'Alb',
                            'albedo': 'Alb'}, inplace=True)
-        
+    
+    if "Time Zone" in meta:
+        meta["TZ"] = meta.pop("Time Zone")
+    if "City" in meta:
+        meta["city"] = meta.pop("City")
+
     return myTMY3, meta
 
 def fixintervalTMY(myTMY3, meta):
