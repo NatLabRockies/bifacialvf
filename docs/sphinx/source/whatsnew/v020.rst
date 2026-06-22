@@ -6,6 +6,7 @@ v0.2.0 (June 22, 2026)
 Enhancements
 ~~~~~~~~~~~~
 * Python version support updated: Py3.10 through Py3.14.  Prior versions may still work but are untested. (:pull:`64`)
+* NSRDB PSM4 files can now be loaded with bifacialvf.readInputTMY() (:issue:`55`)
 
 Bug fixes
 ~~~~~~~~~
