@@ -11,6 +11,7 @@ Bug fixes
 ~~~~~~~~~
 * With ``agriPV==True``, output file now prints as space separated array and reads back in as np.array object. Values rounded to 4 significant digits. (:pull:`64`)
 * Azimuth=270 logic error fixed with tracking systems (:issue:`61`)
+* iStopIso > 180 limit error fixed.  (:issue:`53`)
 
 Documentation
 ~~~~~~~~~~~~~~
